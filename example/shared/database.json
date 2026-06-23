@@ -1,0 +1,1 @@
+{ "collections": [ { "name": "products", "source": "shared/products", "destination": "products", "enabled": true } ] }

@@ -1,0 +1,71 @@
+/* Hero section */
+.hero {
+  /* Note: background-image and min-height are set via inline styles in component */
+  /* This allows each hero to have different images and heights */
+  background-size: cover;
+  background-position: center 0px; /* Initialize to match JavaScript starting position */
+  position: relative;
+  padding: 100px 0;
+  overflow: hidden;
+  /* Note: background-attachment removed for JS-controlled parallax */
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45); /* Default opacity */
+  z-index: 0;
+  transition: transform 0.1s ease-out; /* Smooth transform for parallax */
+}
+
+/* Overlay variations based on data-overlay attribute */
+.hero[data-overlay="0"]::before,
+.hero[data-overlay="none"]::before {
+  display: none; /* No overlay */
+}
+
+.hero[data-overlay="light"]::before {
+  background: rgba(0, 0, 0, 0.2); /* 20% opacity */
+}
+
+.hero[data-overlay="medium"]::before {
+  background: rgba(0, 0, 0, 0.45); /* 45% opacity (default) */
+}
+
+.hero[data-overlay="dark"]::before {
+  background: rgba(0, 0, 0, 0.7); /* 70% opacity */
+}
+
+/* Support custom numeric values (0.0 to 1.0) */
+.hero[data-overlay]::before {
+  background: rgba(0, 0, 0, var(--overlay-opacity, 0.45));
+}
+
+
+.hero > .container {
+  position: relative;
+  z-index: 1;
+  transform: translateY(40px);
+  transition: transform 0.1s ease-out;
+}
+
+.hero-title {
+  /* font-family: 'Cinzel', serif; */
+  /* font-weight: 700; */
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  color: #ffffff;
+  letter-spacing: 0.05em;
+  text-shadow:
+    0 0 20px rgba(255, 255, 255, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.8);
+}
+
+.hero-subtitle {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 600;
+  font-size: clamp(0.9rem, 2vw, 1.4rem);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #e07a1f;
+}

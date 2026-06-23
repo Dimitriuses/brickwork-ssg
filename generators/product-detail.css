@@ -1,0 +1,98 @@
+/* Product Detail Page Specific Styles */
+
+.product-detail-images {
+  position: sticky;
+  top: 100px;
+}
+
+.product-detail-images .carousel {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f8f9fa;
+}
+
+.product-detail-images .carousel-item img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.product-detail-images .carousel-control-prev-icon,
+.product-detail-images .carousel-control-next-icon {
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  padding: 15px;
+  width: 40px;
+  height: 40px;
+}
+
+.product-detail-images .carousel-indicators {
+  margin-bottom: 10px;
+}
+
+.product-detail-images .carousel-indicators button {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.product-detail-images .carousel-indicators button.active {
+  background-color: rgba(255, 255, 255, 1);
+}
+
+.thumbnail-gallery {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+
+.thumbnail-image {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border: 2px solid #e0e0e0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.thumbnail-image:hover {
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.product-detail-title {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #ccc;
+  margin-bottom: 1rem;
+}
+
+.product-detail-price {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #667eea;
+  margin-bottom: 1.5rem;
+}
+
+.product-detail-description {
+  color: #999;
+  line-height: 1.8;
+}
+
+.product-actions .btn {
+  font-size: 1.1rem;
+  padding: 12px;
+}
+
+.nav-tabs .nav-link {
+  color: #999;
+}
+
+.nav-tabs .nav-link.active {
+  color: #667eea;
+  font-weight: 600;
+}

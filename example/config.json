@@ -1,0 +1,5 @@
+{
+  "site": { "name": "Brickwork Demo", "logo": "assets/images/logo.png", "description": "A demo site built with brickwork.", "url": "https://example.com", "contact": { "email": "hello@example.com", "phone": "" } },
+  "social": { "github": "https://github.com/", "telegram": "https://t.me/" },
+  "nav": [ { "label": "Home", "url": "index.html" }, { "label": "Shop", "url": "shop.html" }, { "label": "About", "url": "about.html" } ]
+}

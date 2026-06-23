@@ -1,0 +1,42 @@
+/* Contact Icons Component Styles */
+
+.social-links {
+  margin: 20px 0;
+}
+
+.social-links a {
+  color: #667eea;
+  font-size: 1.5rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+
+.social-links a:hover {
+  color: #e07a1f !important;
+  transform: translateY(-3px);
+}
+
+.social-links a i.bi,
+.social-links a img.bi {
+  font-size: 1.5rem;
+}
+
+/* Dark background support */
+.social-links a img.bi {
+  transition: filter 0.3s ease;
+}
+
+.social-links a img.bi{
+  filter: brightness(0) saturate(100%) invert(64%) sepia(68%) saturate(4510%) hue-rotate(207deg) brightness(92%) contrast(100%) !important;
+  width: 30px;
+  height: 30px;
+}
+
+.social-links a:hover img.bi {
+  filter: brightness(0) saturate(100%) invert(58%) sepia(89%) saturate(1346%) hue-rotate(339deg) brightness(99%) contrast(95%) !important;
+}

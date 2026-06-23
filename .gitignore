@@ -1,0 +1,14 @@
+# Build output (regenerated)
+build/
+example/build/
+
+# Node modules
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+npm-debug.log*

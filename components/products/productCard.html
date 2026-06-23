@@ -1,0 +1,22 @@
+<div class="col-md-6 col-lg-4 mb-4">
+  <div class="card product-card h-100">
+    <div class="product-image-container">
+      <!-- Carousel for multiple images -->
+      <div id="carousel-{{PRODUCT_ID}}" class="carousel slide" data-bs-ride="false">
+        <div class="carousel-inner">
+          {{CAROUSEL_IMAGES}}
+        </div>
+        <!-- Carousel controls (only show if multiple images) -->
+        {{CAROUSEL_CONTROLS}}
+      </div>
+    </div>
+    <div class="card-body d-flex flex-column">
+      <h5 class="card-title product-name">{{PRODUCT_NAME}}</h5>
+      <p class="card-text product-description flex-grow-1">{{PRODUCT_DESCRIPTION}}</p>
+      <div class="product-footer mt-auto">
+        <p class="product-price mb-2">{{PRODUCT_PRICE}}</p>
+        <a href="{{PRODUCT_LINK}}" class="btn btn-primary w-100">{{BUTTON_TEXT}}</a>
+      </div>
+    </div>
+  </div>
+</div>

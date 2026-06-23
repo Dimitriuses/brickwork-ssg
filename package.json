@@ -1,0 +1,45 @@
+{
+  "name": "brickwork",
+  "version": "0.1.0",
+  "description": "A tiny, zero-config static-site generator: build pages from reusable components and collections.",
+  "bin": {
+    "ssg": "cli.js"
+  },
+  "main": "build.js",
+  "scripts": {
+    "build": "node cli.js build",
+    "test": "node test/smoke.js",
+    "admin": "node cli.js admin"
+  },
+  "files": [
+    "build.js",
+    "cli.js",
+    "lib/",
+    "components/",
+    "generators/",
+    "shared/admin/server.js",
+    "shared/admin/public/",
+    "shared/admin/package.json",
+    "CLAUDE.md"
+  ],
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "keywords": [
+    "static-site-generator",
+    "ssg",
+    "components",
+    "static-site",
+    "html"
+  ],
+  "license": "MIT",
+  "author": "Dimitriuses",
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}

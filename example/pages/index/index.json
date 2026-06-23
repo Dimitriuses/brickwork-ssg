@@ -1,0 +1,8 @@
+{
+  "page": "index", "title": "Home", "header_theme": "dark", "layout": "_layout",
+  "components": [
+    { "name": "hero", "vars": { "HERO_TITLE": "Brickwork", "HERO_SUBTITLE": "Build sites from reusable bricks", "HERO_BG_IMAGE": "assets/images/hero.png", "HERO_HEIGHT": "60vh", "HERO_OVERLAY": "0.5" } },
+    { "name": "products", "vars": { "PRODUCTS_TITLE": "Featured", "PRODUCTS_SUBTITLE": "Sample collection", "PRODUCTS_PER_PAGE": 0 } },
+    { "name": "faq", "vars": { "FAQ_TITLE": "FAQ", "FAQ_SUBTITLE": "Common questions", "FAQ_ITEMS": [ { "question": "What is brickwork?", "answer": "A tiny static-site generator." }, { "question": "Is it fast?", "answer": "Yes, builds in well under a second." } ], "FAQ_CTA_TEXT": "Still curious?", "FAQ_CTA_LINK": "about.html", "FAQ_CTA_BUTTON": "Learn more" } }
+  ]
+}

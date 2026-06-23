@@ -1,0 +1,1 @@
+// site global script

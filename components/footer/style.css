@@ -1,0 +1,9 @@
+/* Footer styles */
+footer a {
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+footer a:hover {
+  color: white !important;
+}

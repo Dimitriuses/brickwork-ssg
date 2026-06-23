@@ -1,0 +1,1 @@
+{ "page": "shop", "title": "Shop", "header_theme": "dark", "layout": "_layout", "components": [ { "name": "products", "vars": { "PRODUCTS_TITLE": "Shop", "PRODUCTS_SUBTITLE": "All products", "PRODUCTS_PER_PAGE": 1 } } ] }

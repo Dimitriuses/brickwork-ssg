@@ -1,0 +1,17 @@
+<section class="products-section py-5" data-products-per-page="{{PRODUCTS_PER_PAGE}}">
+  <div class="container">
+    <!-- Section Header -->
+    <div class="text-center mb-5">
+      <h2 class="display-5 fw-bold">{{PRODUCTS_TITLE}}</h2>
+      <p class="lead text-muted">{{PRODUCTS_SUBTITLE}}</p>
+    </div>
+
+    <!-- Products Grid -->
+    <div class="row products-grid">
+      {{PRODUCTS_HTML}}
+    </div>
+
+    <!-- Pagination controls (populated by script.js when enabled) -->
+    <nav class="products-pagination" aria-label="Products pagination"></nav>
+  </div>
+</section>
