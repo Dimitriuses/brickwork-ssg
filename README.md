@@ -1,17 +1,11 @@
-# brickwork
+# brickwork-ssg
 
 A tiny, zero-config **static-site generator**. Build pages from reusable HTML
 components and content collections — no framework, no client runtime, and zero
 runtime dependencies for the build itself.
 
-> Status: **v0.1.0**. One engine builds many sites; a site is just a directory
-> of content that depends on this package.
-
-## Install
-
-```bash
-npm install --save-dev brickwork
-```
+> Status: **v0.1.0**. One engine builds many sites; a site embeds this engine
+> as a **git submodule** and runs it.
 
 ## A site is a directory
 
@@ -23,22 +17,41 @@ my-site/
 └── shared/              # database.json + collections (e.g. products/)
 ```
 
-## Build & manage
+## Use it in a site (git submodule)
+
+A site is a separate repo that embeds this engine as a submodule and runs it:
 
 ```bash
-npx ssg build            # build the site in the current directory into build/
-npx ssg build --site .   # explicit; --site <dir> builds any site directory
-npx ssg admin            # start the product admin panel on http://localhost:3000
+git submodule add <brickwork-ssg-repo-url> engine   # embed the engine at engine/
+git submodule update --init --recursive
+
+node engine/cli.js build                 # build the site (cwd) into build/
+node engine/cli.js build --site path     # or build any site directory
+node engine/cli.js admin                 # product admin on http://localhost:3000
 ```
 
 Add scripts to your site's `package.json`:
 
 ```json
 {
-  "scripts": { "build": "ssg build", "admin": "ssg admin" },
-  "devDependencies": { "brickwork": "^0.1.0" }
+  "scripts": {
+    "build": "node engine/cli.js build",
+    "admin": "node engine/cli.js admin"
+  }
 }
 ```
+
+The build needs **no dependencies**. The admin panel needs the engine's deps —
+install them once into the submodule: `npm --prefix engine install`.
+
+**Pin & update the engine** by checking out a release tag inside the submodule:
+
+```bash
+git -C engine fetch --tags && git -C engine checkout v0.1.0
+git add engine && git commit -m "engine v0.1.0"
+```
+
+Clone a site with its engine in one step: `git clone --recurse-submodules <site-url>`.
 
 ## What you get
 
