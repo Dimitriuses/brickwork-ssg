@@ -17,8 +17,9 @@ After Phase 1 the engine is site-agnostic and resolves component **templates** s
 | Add a component with its own `.build.js` (logic) | ❌ build scripts resolve engine-only | ✅ |
 | Add its own generator | ❌ generators scan `ENGINE_ROOT/generators` only | ✅ |
 | A component with sub-components | ❌ `subComponentMappings` hardcoded | ✅ declared per-component |
+| Run tests for the site itself | ❌ only the engine's `example/` smoke test | ✅ `ssg test` runs site tests + reusable checks |
 
-## The model — four additive changes
+## The model — five additive changes
 
 ### 1. Search paths (site wins)
 
@@ -73,12 +74,34 @@ Replace the hardcoded `subComponentMappings` (`faqItem→faq`, `productCard→pr
 
 The engine builds the sub-component → parent map by scanning every component's `.json` across both roots. Site components can then define their own sub-components.
 
+### 5. Site-authored tests
+
+Today only the engine self-tests (`test/smoke.js` builds `example/` and asserts content-agnostic invariants). A site can't reuse those checks or add its own. v0.2 lets a site test **its own** build:
+
+- **Extract the engine's invariant checks** out of `test/smoke.js` into a reusable module (e.g. `lib/checks.js`) exporting `standardChecks(buildDir) -> failures[]` — no unresolved `{{VAR}}` / `{{COMPONENT:}}`, no broken links, no invalid ids, no backslash web paths, etc.
+- **New `ssg test [--site <dir>]` command** — builds the site, runs the standard checks against `build/`, then runs the site's own `test/*.test.js` files (if any), and exits non-zero on any failure.
+- **Site test contract:**
+
+  ```js
+  // SITE_ROOT/test/shop.test.js
+  module.exports = ({ buildDir, read, check }) => {
+    const shop = read('shop.html');
+    check('shop lists 4 products', (shop.match(/product-card/g) || []).length === 4);
+    check('has a contact page', read('contact.html').length > 0);
+  };
+  ```
+
+  `ctx` provides `{ siteRoot, buildDir, read(file), check(name, cond), standardChecks }` so site tests assert site-specific things (product counts, required pages, nav targets) on top of the generic invariants.
+
+The engine keeps its own `test/smoke.js`, now built on `lib/checks.js`. Sites opt in by adding a `test/` dir; with no `test/`, `ssg test` just builds and runs the standard checks.
+
 ## Backward compatibility
 
 All four changes are additive:
 - No `SITE_ROOT/components` or `/generators` ⇒ identical to v0.1.
 - Built-in generators keep working (migrated behind the new contract).
 - Existing component `.json` files without `subComponents` keep working (the engine seeds the built-in mappings as defaults until components declare their own).
+- `ssg test` is new and opt-in; a site with no `test/` dir just gets the standard checks. The engine's own smoke test keeps passing (re-pointed at `lib/checks.js`).
 
 So v0.2 is a **non-breaking minor release**; sites on v0.1 upgrade with no changes.
 
@@ -97,4 +120,5 @@ So v0.2 is a **non-breaking minor release**; sites on v0.1 upgrade with no chang
 1. Component search paths + site-first resolution in `buildComponent` (+ asset collect/copy across both roots). Smoke-test: a site-only component with template + build.js + CSS renders, styles, and links.
 2. Declarative sub-components; seed built-in defaults; remove the hardcoded map.
 3. Generic `generate(ctx)` contract; migrate the two built-in generators; scan both generator roots. Smoke-test: a site-only generator emits a page.
-4. Docs + a demo example (the demo site ships one custom component to showcase it).
+4. Extract `lib/checks.js`; add the `ssg test` command + site test contract. Smoke-test: a site `test/*.test.js` runs and can fail the build.
+5. Docs + a demo example (the demo ships a custom component, a custom generator, and a site test to showcase all of v0.2).
