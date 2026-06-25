@@ -63,6 +63,7 @@ module.exports = {
 - The two built-in generators (`generate-products`, `generate-custom`) migrate to this contract internally — an engine-side change, invisible to sites.
 - Ordering: run engine generators first, then site generators, so a site generator can override an engine-produced page by emitting the same `page` name (later write wins). Emit a warning on a page-name collision.
 - `ctx.lib` hands generators the engine helpers so they don't reach into `../lib` by relative path (which only works because they live inside the engine today).
+- The same `lib` surface (`{ slugify, escapeHtml, raw }`) is also passed to component `.build.js` scripts as a 4th argument — `build(vars, loadComponent, replaceVariables, helpers)` — so site components can escape and emit HTML without reaching into the engine's `lib/`. Additive and backward-compatible (existing 3-arg scripts ignore it). Implemented in Phase C.
 
 ### 4. Declarative sub-components
 

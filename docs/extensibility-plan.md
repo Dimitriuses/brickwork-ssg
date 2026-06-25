@@ -52,18 +52,24 @@ This centralizes "site-first, engine-fallback" so the four feature phases share 
 
 ---
 
-## Phase C — Generic generator contract
+## Phase C — Generic generator contract + build-script helpers
 
-**Goal:** sites add their own generators; the contract is neutral.
+**Goal:** sites add their own generators (neutral contract), and **both** generators and component `.build.js` scripts get a shared **helper surface** so site code never reaches into the engine's `lib/` by relative path.
 
-**Changes (`build.js` generator loop + `generators/*`):**
-- New contract: `module.exports = { generate(ctx) }`, `ctx = { siteRoot, engineRoot, buildDir, outputDir, lib: { slugify, escapeHtml, raw } }`, returns written page-JSON paths.
+**Shared helper surface (define once):** `{ slugify, escapeHtml, raw }` — the helpers the demo's and the private site's generators/components actually use (per the v0.2 decision on `ctx.lib`). Exposed as `ctx.lib` to generators and as a `helpers` argument to component build scripts. Keep it small; widen only as a concrete generator/test needs it.
+
+**Changes — generators (`build.js` generator loop + `generators/*`):**
+- New contract: `module.exports = { generate(ctx) }`, `ctx = { siteRoot, engineRoot, buildDir, outputDir, lib }`, returns written page-JSON paths.
 - Scan `GENERATOR_ROOTS = [SITE_ROOT/generators, ENGINE_ROOT/generators]`. Run **engine first, then site** (so a site can shadow a page by re-emitting its `page` name; warn on collision).
 - Back-compat shim: if a module exports `generate`, call it; else if it exports the legacy `generateProductPages`, call that. Then migrate the two built-ins to `generate(ctx)` (use `ctx.lib` instead of `require('../lib/...')`).
 
-**Fixture & verification:** `example/generators/news.build.js` emits a `news-*` page from `example` data. Smoke: the page is built; built-ins still produce product pages; engine-only build unchanged.
+**Changes — component build scripts (`build.js` `buildComponent`):**
+- Extend the contract from `build(vars, loadComponent, replaceVariables)` to `build(vars, loadComponent, replaceVariables, helpers)`, where `helpers` is the same `{ slugify, escapeHtml, raw }` surface. Backward-compatible: existing 3-arg scripts (all engine components) ignore the 4th arg.
+- This closes the gap flagged in Phase A: a site `.build.js` can now escape text and emit HTML safely (`helpers.raw(...)`, `helpers.escapeHtml(...)`) instead of manual string assembly + `.replace`.
 
-**Risk:** keep the legacy shim until built-ins are migrated, then it's optional to retain (document either way).
+**Fixture & verification:** `example/generators/news.build.js` emits a `news-*` page from `example` data; the `example` `pricing` component's `.build.js` is refactored to use `helpers.raw`/`escapeHtml` (instead of manual `.replace`) to prove build scripts receive the helpers. Smoke: the news page is built, the pricing component still renders, built-ins still produce product pages, engine-only build unchanged.
+
+**Risk:** keep the legacy generator shim until built-ins are migrated, then it's optional to retain (document either way). The 4th build-script arg is additive, so no component needs changing.
 
 ---
 
