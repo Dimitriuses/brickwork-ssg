@@ -1,10 +1,10 @@
 /* FAQ Component Styles */
 .faq-section {
-  background-color: #091d2a;
+  background-color: var(--bw-surface-deep, #091d2a);
 }
 
 .faq-icon {
-  color: #667eea;
+  color: var(--bw-accent, #667eea);
   flex-shrink: 0;
   transition: transform 0.3s ease;
 }
@@ -13,21 +13,21 @@
   font-size: 1.1rem;
   font-weight: 500;
   padding: 1.25rem 1.5rem;
-  background-color: #013146;
+  background-color: var(--bw-surface-alt, #013146);
   color: #fff;
   border: none;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .accordion-button:not(.collapsed) {
-  background-color: #013146;
-  color: #667eea;
+  background-color: var(--bw-surface-alt, #013146);
+  color: var(--bw-accent, #667eea);
   box-shadow: none;
 }
 
 .accordion-button:not(.collapsed) .faq-icon {
   transform: rotate(180deg);
-  color: #4f62c1;
+  color: var(--bw-accent-hover, #4f62c1);
 }
 
 .accordion-button:focus {
@@ -51,8 +51,8 @@
   padding: 1.5rem;
   font-size: 1rem;
   line-height: 1.7;
-  color: #999;
-  background-color: #012436;
+  color: var(--bw-text-muted, #999);
+  background-color: var(--bw-surface-deep, #012436);
 }
 
 .faq-section .display-5 {

@@ -67,5 +67,5 @@
   font-size: clamp(0.9rem, 2vw, 1.4rem);
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: #e07a1f;
+  color: var(--bw-accent-2, #e07a1f);
 }

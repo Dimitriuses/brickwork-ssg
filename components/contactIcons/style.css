@@ -5,7 +5,7 @@
 }
 
 .social-links a {
-  color: #667eea;
+  color: var(--bw-accent, #667eea);
   font-size: 1.5rem;
   text-decoration: none;
   transition: all 0.3s ease;
@@ -17,7 +17,7 @@
 }
 
 .social-links a:hover {
-  color: #e07a1f !important;
+  color: var(--bw-accent-2, #e07a1f) !important;
   transform: translateY(-3px);
 }
 

@@ -73,6 +73,32 @@ Clone a site with its engine in one step: `git clone --recurse-submodules <site-
 See [CLAUDE.md](CLAUDE.md) for the full architecture and [docs/extensibility.md](docs/extensibility.md)
 for the planned v0.2 (site-authored components & generators).
 
+## Theming
+
+Component colours are CSS custom properties with the engine defaults as
+fallbacks. Override any of them in your site's `assets/css/global.css` `:root`
+(it cascades over the engine regardless of load order); unset variables keep the
+default. Set the page background with your own `body { background }`.
+
+Defaults:
+
+```css
+:root {
+  --bw-accent: #667eea;        /* buttons, prices, links, active states */
+  --bw-accent-hover: #4f62c1;
+  --bw-accent-2: #e07a1f;      /* secondary accent */
+  --bw-surface: #013440;       /* card / panel background */
+  --bw-surface-alt: #013146;
+  --bw-surface-deep: #012530;  /* deepest panels, disabled */
+  --bw-border: #e0e0e0;        /* card borders */
+  --bw-border-dark: #014b5a;   /* pagination / dark borders */
+  --bw-image-bg: #f8f9fa;      /* image placeholder background */
+  --bw-text: #cccccc;          /* primary text */
+  --bw-text-muted: #999999;    /* secondary text */
+  --bw-text-faint: #666666;    /* disabled text */
+}
+```
+
 ## Develop the engine
 
 ```bash
