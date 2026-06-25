@@ -90,9 +90,7 @@ function loadComponent(componentName) {
   // Sub-components (e.g. faqItem, productCard) live in their parent's folder.
   const subComponentMappings = {
     'faqItem': 'faq',
-    'productCard': 'products',
-    'header-light': 'header',
-    'header-dark': 'header'
+    'productCard': 'products'
   };
   const dir = subComponentMappings[componentName] || componentName;
 

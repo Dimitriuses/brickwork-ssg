@@ -7,6 +7,10 @@ runtime dependencies for the build itself.
 > Status: **v0.1.0**. One engine builds many sites; a site embeds this engine
 > as a **git submodule** and runs it.
 
+> **Provenance:** this repository was extracted from a larger private project and
+> later separated into an independent engine. The current commit history does not
+> reflect the full development timeline.
+
 ## A site is a directory
 
 ```

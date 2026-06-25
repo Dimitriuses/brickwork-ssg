@@ -39,7 +39,7 @@
   "author": "Dimitriuses",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/Dimitriuses/brickwork-ssg.git"
   },
   "publishConfig": { "access": "public" }
 }
