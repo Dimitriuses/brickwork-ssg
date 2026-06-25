@@ -93,11 +93,6 @@ function copyDirectory(src, dest) {
 // may also relocate a component's folder via an optional registry,
 // components/registry.json: { "<componentName>": "<folder under components/>" }.
 
-const SUBCOMPONENT_PARENT = {
-  faqItem: 'faq',
-  productCard: 'products'
-};
-
 let _siteRegistry = null;
 function siteComponentRegistry() {
   if (_siteRegistry) return _siteRegistry;
@@ -113,9 +108,24 @@ function siteComponentRegistry() {
   return _siteRegistry;
 }
 
+// Sub-component -> parent-folder map, built by scanning every component's
+// <name>.json for "subComponents": [...] across both roots (cached per build).
+// e.g. components/faq/faq.json { "subComponents": ["faqItem"] } => faqItem -> faq.
+let _subcomponentMap = null;
+function subcomponentMap() {
+  if (_subcomponentMap) return _subcomponentMap;
+  _subcomponentMap = {};                  // set before scanning to avoid recursion
+  for (const name of allComponentNames()) {
+    for (const sub of (readComponentConfig(name).subComponents || [])) {
+      _subcomponentMap[sub] = name;
+    }
+  }
+  return _subcomponentMap;
+}
+
 // The folder (under a components/ dir) that owns a component's files.
 function componentFolder(name) {
-  return SUBCOMPONENT_PARENT[name] || name;
+  return subcomponentMap()[name] || name;
 }
 
 // Resolve one file of a component, site-first then engine; null if absent.

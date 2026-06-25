@@ -83,5 +83,8 @@ check('site component renders (pricing template)', index.includes('<section clas
 check('site component build logic ran (PLANS expanded)', index.includes('Basic') && index.includes('Pro'));
 check('site component CSS copied', fs.existsSync(path.join(buildDir, 'assets', 'css', 'pricing.css')));
 check('site component CSS linked', /assets\/css\/pricing\.css/.test(index));
+// Phase B: the site component declares its own sub-component (priceRow) in
+// pricing.json, resolved via the dynamic sub-component map.
+check('site sub-component renders (declared priceRow)', index.includes('class="price-row"'));
 
 done();
