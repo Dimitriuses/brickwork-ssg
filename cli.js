@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Engine CLI: `ssg <build|admin> [--site <dir>]`.
+// Engine CLI: `ssg <build|admin|test> [--site <dir>]`.
 //
 // A "site" is a directory holding config.json, pages/, assets/, shared/.
 // The engine (this file, build.js, components/, lib/, admin/) is shared and
@@ -25,11 +25,11 @@ for (let i = 1; i < argv.length; i++) {
 
 function fail(message) {
   console.error(message);
-  console.error('Usage: ssg <build|admin> [--site <dir>]');
+  console.error('Usage: ssg <build|admin|test> [--site <dir>]');
   process.exit(1);
 }
 
-if (command !== 'build' && command !== 'admin') {
+if (!['build', 'admin', 'test'].includes(command)) {
   fail(command ? `Unknown command: ${command}` : 'No command given.');
 }
 
@@ -37,7 +37,7 @@ const siteRoot = path.resolve(process.cwd(), site);
 if (!fs.existsSync(siteRoot)) {
   fail(`Site directory not found: ${siteRoot}`);
 }
-if (command === 'build' && !fs.existsSync(path.join(siteRoot, 'config.json'))) {
+if ((command === 'build' || command === 'test') && !fs.existsSync(path.join(siteRoot, 'config.json'))) {
   fail(`Not a site (no config.json): ${siteRoot}`);
 }
 
@@ -47,6 +47,12 @@ process.chdir(siteRoot);
 
 if (command === 'build') {
   require('./build.js');
-} else {
+} else if (command === 'admin') {
   require('./shared/admin/server.js');
+} else { // test
+  require('./build.js');                 // build the site at cwd (sets exitCode on failure)
+  const buildOk = !process.exitCode;
+  const { runSiteTests } = require('./lib/test-runner');
+  const testsOk = runSiteTests(siteRoot);
+  process.exit(buildOk && testsOk ? 0 : 1);
 }

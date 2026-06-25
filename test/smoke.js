@@ -5,6 +5,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { standardChecks } = require('../lib/checks');
 
 const root = path.join(__dirname, '..');
 const siteDir = path.join(root, 'example');
@@ -37,45 +38,14 @@ if (!fs.existsSync(buildDir)) {
   done();
 }
 
-const htmlFiles = fs.readdirSync(buildDir).filter(f => f.endsWith('.html')).map(f => path.join(buildDir, f));
-check('build produced HTML pages', htmlFiles.length > 0, `${htmlFiles.length} files`);
-check('index.html exists', fs.existsSync(path.join(buildDir, 'index.html')));
+// Reusable, content-agnostic invariants (shared with `ssg test` via lib/checks.js).
+for (const r of standardChecks(buildDir)) check(r.name, r.ok, r.detail);
 
 const index = fs.existsSync(path.join(buildDir, 'index.html'))
   ? fs.readFileSync(path.join(buildDir, 'index.html'), 'utf8') : '';
+check('index.html exists', fs.existsSync(path.join(buildDir, 'index.html')));
 check('layout: <header> present', index.includes('<header'));
 check('layout: <footer> present', index.includes('<footer'));
-
-const unresolved = [], leftoverComponents = [], badIds = [], backslashes = [], brokenLinks = [], brokenButtons = [];
-for (const file of htmlFiles) {
-  const base = path.basename(file);
-  const visible = fs.readFileSync(file, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
-  if (/\{\{[A-Za-z0-9_]+\}\}/.test(visible)) unresolved.push(base);
-  if (/\{\{COMPONENT:/.test(visible)) leftoverComponents.push(base);
-  for (const m of visible.matchAll(/id="(carousel-[^"]*)"/g)) {
-    if (/[ ()A-Z]/.test(m[1])) badIds.push(`${base}:${m[1]}`);
-  }
-  for (const m of visible.matchAll(/(?:src|href)="([^"]*\\[^"]*)"/g)) backslashes.push(`${base}:${m[1]}`);
-  for (const m of visible.matchAll(/href="(product-[^"]+\.html)"/g)) {
-    if (!fs.existsSync(path.join(buildDir, m[1]))) brokenLinks.push(`${base} -> ${m[1]}`);
-  }
-  for (const tag of visible.matchAll(/<a\b[^>]*>/g)) {
-    const openTag = tag[0];
-    if (!/\bclass="[^"]*\bbtn\b[^"]*"/.test(openTag)) continue;
-    const hrefMatch = openTag.match(/\bhref="([^"]*)"/);
-    if (!hrefMatch) continue;
-    const target = hrefMatch[1].split('#')[0].split('?')[0].trim();
-    if (!target) continue;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//')) continue;
-    if (!fs.existsSync(path.join(buildDir, target))) brokenButtons.push(`${base} -> ${hrefMatch[1]}`);
-  }
-}
-check('no unresolved {{VAR}} placeholders', unresolved.length === 0, unresolved.slice(0, 5).join(', '));
-check('no leftover {{COMPONENT:..}}', leftoverComponents.length === 0, leftoverComponents.slice(0, 5).join(', '));
-check('no invalid carousel ids', badIds.length === 0, badIds.slice(0, 5).join(', '));
-check('no backslash web paths', backslashes.length === 0, backslashes.slice(0, 5).join(', '));
-check('all product links resolve', brokenLinks.length === 0, brokenLinks.slice(0, 5).join(', '));
-check('all button links resolve', brokenButtons.length === 0, brokenButtons.slice(0, 10).join(', '));
 
 // Phase A: a site-authored component (example/components/pricing) renders with
 // its own template + build logic + CSS, resolved site-first by the engine.
