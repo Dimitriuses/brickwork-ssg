@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { RawHtml, raw, escapeHtml } = require('./lib/html');
+const { slugify } = require('./lib/slugify');
 
 // Path roots. The engine (this script, components, lib, layout) is shared by
 // every site; the site being built is the current working directory. Splitting
@@ -239,7 +240,7 @@ function buildComponent(componentName, vars = {}, buildStack = []) {
     delete require.cache[absolutePath]; // Clear cache to allow rebuilds
 
     const buildScript = require(absolutePath);
-    html = buildScript.build(vars, loadComponent, replaceVariables);
+    html = buildScript.build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw });
   } else {
     // Standard template replacement
     const template = loadComponent(componentName);
@@ -548,41 +549,62 @@ console.log('[JS] Component scripts copied to build/assets/js/\n');
 // Copy collections (products, custom items, etc.) from shared folder
 copyCollections();
 
-// Execute page build scripts (for generating dynamic pages). Generators write
-// their page JSON into GENERATED_PAGES_DIR and return the list of files they
-// wrote; we build those alongside the pages found under pages/.
+// Execute page generators. They run from the engine and the site (engine
+// first, so a site generator can shadow a page by re-emitting it); each writes
+// page JSON into GENERATED_PAGES_DIR and returns the files it wrote, which we
+// build alongside the pages found under pages/.
+//
+// Contract (v0.2): module.exports = { generate(ctx) }. The legacy
+// module.exports = { generateProductPages(outputDir) } is still supported -
+// see docs/generator-migration.md.
 const generatedPageFiles = [];
-const generatorsDir = GENERATORS_DIR;
-if (fs.existsSync(generatorsDir)) {
-  const pageBuildScripts = fs.readdirSync(generatorsDir)
-    .filter(f => f.endsWith('.build.js'));
+const generatorContext = {
+  siteRoot: SITE_ROOT,
+  engineRoot: ENGINE_ROOT,
+  buildDir: BUILD_DIR,
+  outputDir: GENERATED_PAGES_DIR,
+  lib: { slugify, escapeHtml, raw }
+};
+const generatorRoots = [GENERATORS_DIR, path.join(SITE_ROOT, 'generators')];
+const seenGeneratedFiles = new Set();
 
-  if (pageBuildScripts.length > 0) {
-    console.log(`[PAGE-SCRIPTS] Found ${pageBuildScripts.length} page build script(s)\n`);
+generatorRoots.forEach(genDir => {
+  if (!fs.existsSync(genDir)) return;
+  const scripts = fs.readdirSync(genDir).filter(f => f.endsWith('.build.js'));
+  if (scripts.length === 0) return;
+  console.log(`[PAGE-SCRIPTS] Running ${scripts.length} generator(s) from ${path.relative(SITE_ROOT, genDir) || '.'}`);
 
-    pageBuildScripts.forEach(scriptFile => {
-      try {
-        const scriptPath = path.resolve(path.join(generatorsDir, scriptFile));
-        delete require.cache[scriptPath];
+  scripts.forEach(scriptFile => {
+    try {
+      const scriptPath = path.resolve(path.join(genDir, scriptFile));
+      delete require.cache[scriptPath];
+      const mod = require(scriptPath);
 
-        const pageScript = require(scriptPath);
-
-        if (pageScript.generateProductPages && typeof pageScript.generateProductPages === 'function') {
-          const generated = pageScript.generateProductPages(GENERATED_PAGES_DIR);
-          if (Array.isArray(generated)) {
-            generatedPageFiles.push(...generated);
-          }
-        }
-
-      } catch (error) {
-        console.error(`[ERROR] Page build script ${scriptFile} failed:`, error.message);
-        buildErrors++;
+      let generated;
+      if (typeof mod.generate === 'function') {
+        generated = mod.generate(generatorContext);
+      } else if (typeof mod.generateProductPages === 'function') {
+        generated = mod.generateProductPages(GENERATED_PAGES_DIR); // legacy contract
+      } else {
+        console.log(`  [WARNING] ${scriptFile}: no generate(ctx) or generateProductPages export`);
+        return;
       }
-    });
 
-    console.log('');
-  }
-}
+      (Array.isArray(generated) ? generated : []).forEach(p => {
+        const base = path.basename(p);
+        if (seenGeneratedFiles.has(base)) {
+          console.log(`  [WARNING] generator output collision (last wins): ${base}`);
+        }
+        seenGeneratedFiles.add(base);
+        generatedPageFiles.push(p);
+      });
+    } catch (error) {
+      console.error(`[ERROR] Generator ${scriptFile} failed:`, error.message);
+      buildErrors++;
+    }
+  });
+});
+if (generatedPageFiles.length) console.log('');
 
 // Build all pages
 const pageFiles = [];

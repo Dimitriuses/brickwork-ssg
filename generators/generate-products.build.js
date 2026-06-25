@@ -3,20 +3,18 @@
 
 const fs = require('fs');
 const path = require('path');
-const { slugify } = require('../lib/slugify');
-const { escapeHtml } = require('../lib/html');
 
 /**
- * Generate product detail pages
- * This script is called during the build process to create individual pages for each product
+ * Generate a detail page for each product (v0.2 generator contract).
+ * @param {object} ctx - { siteRoot, engineRoot, buildDir, outputDir, lib }
  */
-function generateProductPages(outputDir) {
-  const productsDir = 'build/products';  // site data, copied into build/ by the engine
+function generate(ctx) {
+  const { slugify, escapeHtml } = ctx.lib;
+  const productsDir = path.join(ctx.buildDir, 'products'); // site data, copied into build/ by the engine
   // Template ships with the engine, next to this generator.
   const templateFile = path.join(__dirname, '_product-detail-template.html');
-  // Generated page JSON is written here (a build scratch dir), not into the
-  // pages/ source tree. build.js passes this and removes it after the build.
-  const generatedDir = outputDir || path.join('build', '_generated-pages');
+  // Generated page JSON goes to the build scratch dir the engine passes in.
+  const generatedDir = ctx.outputDir;
 
   console.log('[PRODUCT-PAGES] Generating individual product pages...');
 
@@ -78,8 +76,8 @@ function generateProductPages(outputDir) {
 
       // Build carousel slides
       let carouselSlidesHtml = '';
-      // Remove 'build/' prefix from path for HTML output
-      const htmlPath = productsDir.replace(/^build\//, '');
+      // Web path prefix for image src (the collection's destination, e.g. 'products').
+      const htmlPath = path.basename(productsDir);
       imageFiles.forEach((imgFile, index) => {
         const imgPath = `${htmlPath}/${folderName}/${imgFile}`;
         const activeClass = index === 0 ? 'active' : '';
@@ -156,4 +154,4 @@ function generateProductPages(outputDir) {
   return generatedPages;
 }
 
-module.exports = { generateProductPages };
+module.exports = { generate };

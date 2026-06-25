@@ -86,5 +86,9 @@ check('site component CSS linked', /assets\/css\/pricing\.css/.test(index));
 // Phase B: the site component declares its own sub-component (priceRow) in
 // pricing.json, resolved via the dynamic sub-component map.
 check('site sub-component renders (declared priceRow)', index.includes('class="price-row"'));
+// Phase C: a site-authored generator (example/generators/news.build.js) emits
+// pages via generate(ctx); the pricing build script used the helpers (raw) - if
+// helpers weren't passed it would have thrown and failed the build.
+check('site generator emitted pages', fs.readdirSync(buildDir).some(f => /^news-.*\.html$/.test(f)));
 
 done();

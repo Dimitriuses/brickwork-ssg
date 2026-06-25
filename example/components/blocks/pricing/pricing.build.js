@@ -1,16 +1,18 @@
-// Example SITE-authored component (lives in the site, not the engine). Proves a
-// site can ship its own component - template + build logic + CSS - resolved
-// site-first by brickwork-ssg (Phase A), and that it can declare its own
-// sub-component in pricing.json (Phase B): each plan renders via `priceRow`.
-function build(vars, loadComponent, replaceVariables) {
+// Example SITE-authored component. Proves a site can ship its own component
+// (Phase A), declare a sub-component in pricing.json (Phase B), and receive the
+// engine's helpers as a 4th argument (Phase C) - here `raw` to insert the
+// assembled rows as HTML via replaceVariables.
+function build(vars, loadComponent, replaceVariables, helpers) {
+  const { raw } = helpers;
   const plans = Array.isArray(vars.PLANS) ? vars.PLANS : [];
   const row = loadComponent('priceRow');
   const items = plans
     .map(p => replaceVariables(row, { NAME: p.name, PRICE: p.price }))
     .join('');
-  return loadComponent('pricing')
-    .replace('{{PRICING_TITLE}}', vars.PRICING_TITLE || 'Plans')
-    .replace('{{PRICING_ITEMS}}', items);
+  return replaceVariables(loadComponent('pricing'), {
+    PRICING_TITLE: vars.PRICING_TITLE || 'Plans',
+    PRICING_ITEMS: raw(items)
+  });
 }
 
 module.exports = { build };

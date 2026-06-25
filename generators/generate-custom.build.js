@@ -3,19 +3,18 @@
 
 const fs = require('fs');
 const path = require('path');
-const { slugify } = require('../lib/slugify');
-const { escapeHtml } = require('../lib/html');
 
 /**
- * Generate product detail pages
- * This script is called during the build process to create individual pages for each product
+ * Generate a detail page for each custom-collection item (v0.2 generator contract).
+ * @param {object} ctx - { siteRoot, engineRoot, buildDir, outputDir, lib }
  */
-function generateProductPages(outputDir) {
-  const productsDir = 'build/custom';
+function generate(ctx) {
+  const { slugify, escapeHtml } = ctx.lib;
+  const productsDir = path.join(ctx.buildDir, 'custom');
   // Template ships with the engine, next to this generator.
   const templateFile = path.join(__dirname, '_custom-detail-template.html');
-  // Generated page JSON goes to a build scratch dir, not the pages/ source tree.
-  const generatedDir = outputDir || path.join('build', '_generated-pages');
+  // Generated page JSON goes to the build scratch dir the engine passes in.
+  const generatedDir = ctx.outputDir;
 
   console.log('[CUSTOM-PAGES] Generating individual product pages...');
 
@@ -79,7 +78,7 @@ function generateProductPages(outputDir) {
       let carouselSlidesHtml = '';
 
       // Remove 'build/' prefix from path for HTML output
-      const htmlPath = productsDir.replace(/^build\//, '');
+      const htmlPath = path.basename(productsDir);
       imageFiles.forEach((imgFile, index) => {
         const imgPath = `${htmlPath}/${folderName}/${imgFile}`;
         const activeClass = index === 0 ? 'active' : '';
@@ -156,4 +155,4 @@ function generateProductPages(outputDir) {
   return generatedPages;
 }
 
-module.exports = { generateProductPages };
+module.exports = { generate };
