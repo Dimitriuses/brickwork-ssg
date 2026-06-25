@@ -11,13 +11,13 @@ npm run admin          # Install admin deps + start the admin panel on http://lo
 npm run admin:start    # Start the admin panel without reinstalling deps
 ```
 
-The engine is invoked through a small CLI, [cli.js](cli.js): `ssg build|admin [--site <dir>]`. A **site** is a directory containing `config.json`, `pages/`, `assets/`, `shared/`; the default site is the current directory, so `node cli.js build` ≡ `node build.js`. The npm scripts operate on this repo's own site.
+The engine is invoked through a small CLI, [cli.js](cli.js): `ssg build|admin|test [--site <dir>]`. A **site** is a directory containing `config.json`, `pages/`, `assets/`, `shared/`; the default site is the current directory, so `node cli.js build` ≡ `node build.js`. The npm scripts operate on this repo's own site.
 
 There is no linter or watch mode. After changing anything under `components/`, `generators/`, `pages/`, `assets/`, `config.json`, or `shared/`, re-run `npm run build` (or `npm test`) and open `build/index.html` (or serve `build/` with `python -m http.server 8000`).
 
 The builder has **zero runtime dependencies** — `node build.js` runs on a clean checkout. Only the admin panel needs Express + Multer, installed into `shared/admin/node_modules/` by `npm run admin:install`.
 
-> Roadmap: [docs/extensibility.md](docs/extensibility.md) - planned v0.2 (site-authored components & generators).
+> **v0.2 — site extensibility:** a site can author its own components, generators, and tests — site-first per-file resolution (+ `components/registry.json`), declarative sub-components, a generic `generate(ctx)` generator contract, build-script helpers, and `ssg test`. See [docs/extensibility.md](docs/extensibility.md).
 
 ## Architecture
 
@@ -29,7 +29,7 @@ A custom static-site generator. The build is driven by [build.js](build.js) (ent
 - **`ENGINE_ROOT`** (`__dirname`) — shared code: `components/`, `generators/`, `lib/`, the `_layout`, and `shared/admin/`.
 - **`SITE_ROOT`** (`process.cwd()`) — per-site: `config.json`, `pages/`, `assets/`, `shared/` data, and the `build/` output.
 
-`loadComponent` resolves **site-first, then engine** (`SITE_ROOT/components/…` before `ENGINE_ROOT/components/…`), so a site can override any component or the layout by dropping a same-named file in its own `components/` — without forking engine logic (build scripts still run from the engine). The `ssg` CLI chdir's into the requested `--site` so `SITE_ROOT` = cwd.
+Components resolve **site-first, then engine**, **per file** (`resolveComponentFile`): a site can override just `header/header.html` and keep the engine's `header.build.js`, or ship a whole new component. A site `components/registry.json` may map a component name to a folder. The `ssg` CLI chdir's into the requested `--site` so `SITE_ROOT` = cwd.
 
 ### Build pipeline (order matters)
 
@@ -51,17 +51,17 @@ Non-obvious constraints:
 A component is a folder. Recognized files:
 - `<name>.html` — template with `{{VAR}}` and `{{COMPONENT:other}}` placeholders.
 - `style.css` / `script.js` — auto-copied and auto-linked only on pages that use the component.
-- `<name>.json` — optional; currently only `{ "dependencies": [...] }`.
+- `<name>.json` — optional; `{ "dependencies": [...], "subComponents": [...] }`.
 - `<name>.build.js` — optional custom logic; **its presence overrides** plain template rendering.
 
 **Build script contract:** `module.exports = { build }` where
-`build(vars, loadComponent, replaceVariables) => htmlString`.
+`build(vars, loadComponent, replaceVariables, helpers) => htmlString` (`helpers = { slugify, escapeHtml, raw }`).
 See [components/products/products.build.js](components/products/products.build.js) and [components/contactIcons/contactIcons.build.js](components/contactIcons/contactIcons.build.js) for the pattern. `header`/`footer` are config-driven: their nav links come from the top-level `nav` array and the logo from `site.logo` (via [components/header/header.build.js](components/header/header.build.js) / [components/footer/footer.build.js](components/footer/footer.build.js)).
 
 **Rendering rules** (in `buildComponent`):
 - `{{COMPONENT:name}}` is resolved recursively with circular-dependency protection (a cycle emits an HTML comment instead of looping).
 - `replaceVariables` (in `build.js`, backed by [lib/html.js](lib/html.js)) **HTML-escapes string/number values by default** and uses a function replacer (so `$` sequences in values are literal). Wrap pre-built HTML in `raw(...)` to insert it verbatim — build scripts do this for assembled fragments (carousels, lists, icons, the page body, css/js link tags). It also **skips arrays** — a list (e.g. `FAQ_ITEMS`) must be expanded by a `.build.js`.
-- Sub-components are hardcoded in `loadComponent`'s `subComponentMappings`: `faqItem`→`faq`, `productCard`→`products`, `header-light`/`header-dark`→`header` (this becomes declarative in v0.2 — see [docs/extensibility.md](docs/extensibility.md)).
+- Sub-components (e.g. `faqItem`→`faq`, `productCard`→`products`) are **declared** in the parent's `<name>.json` (`"subComponents": ["faqItem"]`); the engine scans every component config across both roots to build the map.
 - `header` and `footer` render on **every** page regardless of a page's `components` list. `footer` pulls in `contactIcons` via its dependency + a `{{COMPONENT:contactIcons}}` placeholder.
 
 ### Pages (`pages/<name>/<name>.json`)
@@ -76,7 +76,7 @@ Component **placement**: if the content body contains `{{COMPONENT:name}}`, that
 
 `shared/database.json` lists collections (`{ name, source, destination, enabled }`); enabled ones are copied from `source` (under `SITE_ROOT`) into `build/<destination>`. A product is a folder containing `product.json` (`name`, `price`, `description`, `details`) plus image files (`.jpg/.png/.gif/.webp`); the first image is the primary.
 
-The generators [generators/generate-products.build.js](generators/generate-products.build.js) (scans `build/products`) and [generators/generate-custom.build.js](generators/generate-custom.build.js) (scans `build/custom`) fill the engine templates [generators/_product-detail-template.html](generators/_product-detail-template.html) / [generators/_custom-detail-template.html](generators/_custom-detail-template.html), slugify the folder name into a selector-/URL-safe id (via [lib/slugify.js](lib/slugify.js)), and write one `_generated-product-<id>.json` into the temp `build/_generated-pages/`, which step 7 builds into `product-<id>.html`. Pages whose name starts with `product-` pick up the engine's `generators/product-detail.css|js`. Generators read the product **data** from the site (`build/...`) but their **template** from the engine (`__dirname`).
+The generators [generators/generate-products.build.js](generators/generate-products.build.js) (scans `build/products`) and [generators/generate-custom.build.js](generators/generate-custom.build.js) (scans `build/custom`) fill the engine templates [generators/_product-detail-template.html](generators/_product-detail-template.html) / [generators/_custom-detail-template.html](generators/_custom-detail-template.html), slugify the folder name into a selector-/URL-safe id (via [lib/slugify.js](lib/slugify.js)), and write one `_generated-product-<id>.json` into the temp `build/_generated-pages/`, which step 7 builds into `product-<id>.html`. Pages whose name starts with `product-` pick up the engine's `generators/product-detail.css|js`. Generators read the product **data** from the site (`build/...`) but their **template** from the engine (`__dirname`). They use the v0.2 contract `module.exports = { generate(ctx) }` and run from both `generators/` and `SITE_ROOT/generators` (engine first); the legacy `generateProductPages(outputDir)` export is still supported — see [docs/generator-migration.md](docs/generator-migration.md).
 
 **Products pagination & image loading.** The `products` component takes a `PRODUCTS_PER_PAGE` var (in a page's component `vars`): a positive integer paginates the grid, `0`/unset/invalid disables it. Pagination is **client-side** — every card is rendered at build time; [components/products/script.js](components/products/script.js) reads `data-products-per-page` and slices `.products-grid` into pages with Bootstrap pager controls. All product/detail `<img>` tags carry `loading="lazy" decoding="async"` so off-screen/paginated-away images don't download until shown. The HTML text still scales linearly with product count; per-page HTML splitting is a not-yet-built option.
 

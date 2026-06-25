@@ -4,7 +4,7 @@ A tiny, zero-config **static-site generator**. Build pages from reusable HTML
 components and content collections — no framework, no client runtime, and zero
 runtime dependencies for the build itself.
 
-> Status: **v0.1.0**. One engine builds many sites; a site embeds this engine
+> Status: **v0.2.0**. One engine builds many sites; a site embeds this engine
 > as a **git submodule** and runs it.
 
 > **Provenance:** this repository was extracted from a larger private project and
@@ -32,6 +32,7 @@ git submodule update --init --recursive
 node engine/cli.js build                 # build the site (cwd) into build/
 node engine/cli.js build --site path     # or build any site directory
 node engine/cli.js admin                 # product admin on http://localhost:3000
+node engine/cli.js test                  # build + standard checks + site tests
 ```
 
 Add scripts to your site's `package.json`:
@@ -40,7 +41,8 @@ Add scripts to your site's `package.json`:
 {
   "scripts": {
     "build": "node engine/cli.js build",
-    "admin": "node engine/cli.js admin"
+    "admin": "node engine/cli.js admin",
+    "test": "node engine/cli.js test"
   }
 }
 ```
@@ -51,8 +53,8 @@ install them once into the submodule: `npm --prefix engine install`.
 **Pin & update the engine** by checking out a release tag inside the submodule:
 
 ```bash
-git -C engine fetch --tags && git -C engine checkout v0.1.0
-git add engine && git commit -m "engine v0.1.0"
+git -C engine fetch --tags && git -C engine checkout v0.2.0
+git add engine && git commit -m "engine v0.2.0"
 ```
 
 Clone a site with its engine in one step: `git clone --recurse-submodules <site-url>`.
@@ -70,8 +72,26 @@ Clone a site with its engine in one step: `git clone --recurse-submodules <site-
 - **Safe templating** — values are HTML-escaped by default (`raw()` opt-out),
   ids are slugified, and the build exits non-zero on any page failure.
 
-See [CLAUDE.md](CLAUDE.md) for the full architecture and [docs/extensibility.md](docs/extensibility.md)
-for the planned v0.2 (site-authored components & generators).
+See [CLAUDE.md](CLAUDE.md) for the full architecture.
+
+## Extending (site-authored)
+
+A site can add its own components, generators, and tests — no engine fork needed:
+
+- **Components** — drop `components/<name>/` (`<name>.html`, optional
+  `<name>.build.js`, `<name>.json`, `style.css`/`script.js`) into your site; it's
+  resolved **site-first**. Override a single engine file (e.g. `header/header.html`)
+  and keep the engine's logic. Declare sub-components in `<name>.json`
+  (`"subComponents": ["..."]`), and optionally map names to folders in
+  `components/registry.json`. Build scripts receive
+  `build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw })`.
+- **Generators** — add `generators/<name>.build.js` exporting `{ generate(ctx) }`
+  (`ctx = { siteRoot, engineRoot, buildDir, outputDir, lib }`) that writes page
+  JSON into `ctx.outputDir`. See [docs/generator-migration.md](docs/generator-migration.md).
+- **Tests** — add `test/<name>.test.js` (`module.exports = (ctx) => { ctx.check(...) }`);
+  `ssg test` builds the site, runs reusable standard checks, then your tests.
+
+See [docs/extensibility.md](docs/extensibility.md) for the full design.
 
 ## Theming
 

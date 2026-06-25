@@ -1,6 +1,6 @@
 # Site-Side Extensibility — Engine v0.2 design
 
-_Status: **planned for engine v0.2** (after the repo split). Deferred deliberately: not needed for the demo or personal site, and it is purely additive (a non-breaking minor version), so it carries no lock-in. This doc specifies it so the work isn't lost._
+_Status: **implemented in v0.2.0.** Originally deferred after the repo split (purely additive, non-breaking, no lock-in); this doc is the design of record. All five capabilities below ship in v0.2.0._
 
 ## Goal
 
