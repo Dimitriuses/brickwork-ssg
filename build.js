@@ -83,33 +83,88 @@ function copyDirectory(src, dest) {
   }
 }
 
-// Load a component template, resolving SITE overrides before the engine.
-// A site can override any component (or the layout) by placing a same-named
-// file under its own components/ dir, without forking the engine's logic.
-function loadComponent(componentName) {
-  // Sub-components (e.g. faqItem, productCard) live in their parent's folder.
-  const subComponentMappings = {
-    'faqItem': 'faq',
-    'productCard': 'products'
-  };
-  const dir = subComponentMappings[componentName] || componentName;
+// --- Component resolution (site-first, per file) ----------------------------
+// A component's files (<name>.html, <name>.build.js, <name>.json, style.css,
+// script.js) resolve per-file: SITE_ROOT/components first, then the engine. So
+// a site can override one file (e.g. just the template, keeping the engine's
+// build script) or ship a whole new component.
+//
+// Sub-components (faqItem, productCard) live in their parent's folder. A site
+// may also relocate a component's folder via an optional registry,
+// components/registry.json: { "<componentName>": "<folder under components/>" }.
 
-  // Candidate paths relative to a root: folder form first, then flat (layout).
-  const candidates = [
-    path.join('components', dir, `${componentName}.html`),
-    path.join('components', `${componentName}.html`)
-  ];
+const SUBCOMPONENT_PARENT = {
+  faqItem: 'faq',
+  productCard: 'products'
+};
 
-  // Site root overrides engine root.
-  for (const root of [SITE_ROOT, ENGINE_ROOT]) {
-    for (const rel of candidates) {
-      const file = path.join(root, rel);
-      if (fs.existsSync(file)) {
-        return fs.readFileSync(file, 'utf8');
-      }
+let _siteRegistry = null;
+function siteComponentRegistry() {
+  if (_siteRegistry) return _siteRegistry;
+  _siteRegistry = {};
+  const file = path.join(SITE_ROOT, 'components', 'registry.json');
+  if (fs.existsSync(file)) {
+    try {
+      _siteRegistry = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
+    } catch (error) {
+      console.log('  [WARNING] Failed to parse components/registry.json:', error.message);
     }
   }
+  return _siteRegistry;
+}
 
+// The folder (under a components/ dir) that owns a component's files.
+function componentFolder(name) {
+  return SUBCOMPONENT_PARENT[name] || name;
+}
+
+// Resolve one file of a component, site-first then engine; null if absent.
+function resolveComponentFile(name, filename) {
+  const folder = componentFolder(name);
+  const siteFolder = siteComponentRegistry()[folder] || folder;
+  const candidates = [
+    path.join(SITE_ROOT, 'components', siteFolder, filename),
+    path.join(COMPONENTS_DIR, folder, filename)
+  ];
+  for (const c of candidates) if (fs.existsSync(c)) return c;
+  return null;
+}
+
+// A component's parsed JSON config ({ dependencies, ... }), site-first.
+function readComponentConfig(name) {
+  const file = resolveComponentFile(name, `${name}.json`);
+  if (!file) return { dependencies: [] };
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    console.log(`  [WARNING] Failed to parse ${name}.json:`, error.message);
+    return { dependencies: [] };
+  }
+}
+
+// Every component name known across both roots (and the site registry).
+function allComponentNames() {
+  const names = new Set(Object.keys(siteComponentRegistry()));
+  for (const root of [COMPONENTS_DIR, path.join(SITE_ROOT, 'components')]) {
+    if (!fs.existsSync(root)) continue;
+    for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+      if (e.isDirectory()) names.add(e.name);
+    }
+  }
+  return [...names];
+}
+
+// Load a component template, resolving site overrides before the engine.
+function loadComponent(componentName) {
+  let file = resolveComponentFile(componentName, `${componentName}.html`);
+  if (!file) {
+    // Flat form (e.g. a component placed directly at components/<name>.html).
+    for (const root of [SITE_ROOT, ENGINE_ROOT]) {
+      const flat = path.join(root, 'components', `${componentName}.html`);
+      if (fs.existsSync(flat)) { file = flat; break; }
+    }
+  }
+  if (file) return fs.readFileSync(file, 'utf8');
   throw new Error(`Component not found: ${componentName}`);
 }
 
@@ -162,28 +217,17 @@ function buildComponent(componentName, vars = {}, buildStack = []) {
   // Add to build stack
   const newStack = [...buildStack, componentName];
   
-  // Check if component has a build script
-  const componentDir = path.join(COMPONENTS_DIR, componentName);
-  const buildScriptPath = path.join(componentDir, `${componentName}.build.js`);
-  const configPath = path.join(componentDir, `${componentName}.json`);
-  
-  // Load component configuration if exists
-  let componentConfig = { dependencies: [] };
-  if (fs.existsSync(configPath)) {
-    try {
-      componentConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (error) {
-      console.log(`  [WARNING] Failed to parse ${componentName}.json:`, error.message);
-    }
-  }
-  
+  // Resolve the component's build script site-first: a site can supply its own
+  // logic, or override only the template and keep the engine's build script.
+  const buildScriptPath = resolveComponentFile(componentName, `${componentName}.build.js`);
+
   let html = '';
-  
-  if (fs.existsSync(buildScriptPath)) {
+
+  if (buildScriptPath) {
     // Component has custom build logic
     const absolutePath = path.resolve(buildScriptPath);
     delete require.cache[absolutePath]; // Clear cache to allow rebuilds
-    
+
     const buildScript = require(absolutePath);
     html = buildScript.build(vars, loadComponent, replaceVariables);
   } else {
@@ -356,27 +400,15 @@ function collectComponentAssets(kind, components, pageName) {
 
   function addComponent(compName) {
     if (added.has(compName)) return;
+    added.add(compName);
 
-    const componentDir = path.join(COMPONENTS_DIR, compName);
-    const configPath = path.join(componentDir, `${compName}.json`);
-    const assetFile = path.join(componentDir, sourceFile);
+    // Dependencies first (depth-first), then this component's own asset - all
+    // resolved site-first so site components and overrides are picked up.
+    (readComponentConfig(compName).dependencies || []).forEach(addComponent);
 
-    let componentConfig = { dependencies: [] };
-    if (fs.existsSync(configPath)) {
-      try {
-        componentConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      } catch (error) {
-        // Ignore parse errors
-      }
-    }
-
-    // Add dependencies first (depth-first)
-    (componentConfig.dependencies || []).forEach(addComponent);
-
-    if (fs.existsSync(assetFile)) {
+    if (resolveComponentFile(compName, sourceFile)) {
       files.push(`assets/${kind}/${compName}.${kind}`);
     }
-    added.add(compName);
   }
 
   // Always-present base components, then the page's own components.
@@ -418,15 +450,13 @@ function copyComponentAssets(kind) {
     fs.copyFileSync(globalAsset, path.join(buildAssetDir, `global.${kind}`));
   }
 
-  // Component assets
-  fs.readdirSync(COMPONENTS_DIR, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .forEach(dirent => {
-      const assetFile = path.join(COMPONENTS_DIR, dirent.name, sourceFile);
-      if (fs.existsSync(assetFile)) {
-        fs.copyFileSync(assetFile, path.join(buildAssetDir, `${dirent.name}.${kind}`));
-      }
-    });
+  // Component assets (engine + site; site overrides win, registry-relocated too)
+  allComponentNames().forEach(compName => {
+    const assetFile = resolveComponentFile(compName, sourceFile);
+    if (assetFile) {
+      fs.copyFileSync(assetFile, path.join(buildAssetDir, `${compName}.${kind}`));
+    }
+  });
 
   // Site page-specific assets (top-level page folders only)
   fs.readdirSync(PAGES_DIR, { withFileTypes: true }).forEach(entry => {

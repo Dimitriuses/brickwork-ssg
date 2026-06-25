@@ -77,4 +77,11 @@ check('no backslash web paths', backslashes.length === 0, backslashes.slice(0, 5
 check('all product links resolve', brokenLinks.length === 0, brokenLinks.slice(0, 5).join(', '));
 check('all button links resolve', brokenButtons.length === 0, brokenButtons.slice(0, 10).join(', '));
 
+// Phase A: a site-authored component (example/components/pricing) renders with
+// its own template + build logic + CSS, resolved site-first by the engine.
+check('site component renders (pricing template)', index.includes('<section class="pricing">'));
+check('site component build logic ran (PLANS expanded)', index.includes('Basic') && index.includes('Pro'));
+check('site component CSS copied', fs.existsSync(path.join(buildDir, 'assets', 'css', 'pricing.css')));
+check('site component CSS linked', /assets\/css\/pricing\.css/.test(index));
+
 done();

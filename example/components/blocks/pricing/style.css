@@ -1,0 +1,9 @@
+/* Site component styles. Uses an engine theme variable to show site components
+   participate in theming too. */
+.pricing { padding: 2rem 0; }
+.pricing-list { list-style: none; padding: 0; max-width: 420px; }
+.pricing-list li {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--bw-border, #e0e0e0);
+  color: var(--bw-text, #cccccc);
+}

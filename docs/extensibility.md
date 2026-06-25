@@ -38,6 +38,7 @@ Generalize what `loadComponent` already does to **every** component file — `<n
 
 - A fully site-authored component (`pricing/`) has all its files in the site → all load from the site.
 - An override that ships only `header/header.html` keeps using the engine's `header.build.js` (the existing "override markup, keep logic" behavior — now consistent for all file types).
+- **Optional component registry** — `SITE_ROOT/components/registry.json` maps `"<componentName>": "<folder under components/>"`, so a site can place a component's folder anywhere (Angular-style) instead of requiring folder-name = component-name. Files inside keep the `<name>.*` convention.
 
 Touch points:
 - `buildComponent`: compute the component dir / build-script path / json path via site-first resolution (today they use `COMPONENTS_DIR` = engine only).
