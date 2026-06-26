@@ -554,9 +554,9 @@ copyCollections();
 // page JSON into GENERATED_PAGES_DIR and returns the files it wrote, which we
 // build alongside the pages found under pages/.
 //
-// Contract (v0.2): module.exports = { generate(ctx) }. The legacy
-// module.exports = { generateProductPages(outputDir) } is still supported -
-// see docs/generator-migration.md.
+// Contract: module.exports = { generate(ctx) }. (The pre-0.2
+// generateProductPages(outputDir) contract was removed in v0.2.1; see
+// docs/generator-migration.md to migrate.)
 const generatedPageFiles = [];
 const generatorContext = {
   siteRoot: SITE_ROOT,
@@ -584,9 +584,15 @@ generatorRoots.forEach(genDir => {
       if (typeof mod.generate === 'function') {
         generated = mod.generate(generatorContext);
       } else if (typeof mod.generateProductPages === 'function') {
-        generated = mod.generateProductPages(GENERATED_PAGES_DIR); // legacy contract
+        // The pre-0.2 generateProductPages(outputDir) contract was removed in
+        // v0.2.1. Fail loud with a migration pointer instead of silently skipping.
+        console.error(`[ERROR] Generator ${scriptFile} uses the removed `
+          + `generateProductPages(outputDir) contract - migrate to generate(ctx); `
+          + `see docs/generator-migration.md`);
+        buildErrors++;
+        return;
       } else {
-        console.log(`  [WARNING] ${scriptFile}: no generate(ctx) or generateProductPages export`);
+        console.log(`  [WARNING] ${scriptFile}: no generate(ctx) export`);
         return;
       }
 

@@ -29,16 +29,14 @@ Each emitted JSON is a page config (`{ page, title, layout, components, content,
 the same shape `pages/<name>/<name>.json` uses. The engine builds each into
 `build/<page>.html`.
 
-## Legacy generators still work
+## The legacy contract was removed in v0.2.1
 
-The previous contract — `module.exports = { generateProductPages(outputDir) }` —
-is **still supported**. If a module has no `generate` export, the engine calls
-`generateProductPages(outputDir)` with the scratch dir. So existing/external
-generators keep working with no change.
+The original contract — `module.exports = { generateProductPages(outputDir) }` —
+was supported through **v0.2.0** and **removed in v0.2.1**. A generator that
+exports only `generateProductPages` now **fails the build** with a pointer to
+this document, instead of silently doing nothing. Migrate it to `generate(ctx)`:
 
-If you maintain such a generator and want to move to the new contract:
-
-| Legacy | v0.2 |
+| Before (removed) | Now |
 |---|---|
 | `function generateProductPages(outputDir)` | `generate(ctx)` |
 | `outputDir` | `ctx.outputDir` |
