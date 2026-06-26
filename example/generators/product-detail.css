@@ -1,0 +1,4 @@
+/* Example SITE override of the engine's generators/product-detail.css.
+   Resolved site-first, so generated product pages link THIS file instead of the
+   engine's. The smoke test asserts this marker reaches build/. */
+.product-detail-site-marker { display: none; }

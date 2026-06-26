@@ -404,6 +404,17 @@ const ASSET_KINDS = {
   js: { sourceFile: 'script.js', base: ['header'] }
 };
 
+// Resolve a generator-adjacent file (e.g. product-detail.css/js) site-first:
+// SITE_ROOT/generators/<filename> shadows the engine's generators/<filename>.
+function resolveGeneratorFile(filename) {
+  const candidates = [
+    path.join(SITE_ROOT, 'generators', filename),
+    path.join(GENERATORS_DIR, filename)
+  ];
+  for (const c of candidates) if (fs.existsSync(c)) return c;
+  return null;
+}
+
 function collectComponentAssets(kind, components, pageName) {
   const { sourceFile, base } = ASSET_KINDS[kind];
   const files = [`assets/${kind}/global.${kind}`];
@@ -427,10 +438,10 @@ function collectComponentAssets(kind, components, pageName) {
   (components || []).forEach(comp => addComponent(comp.name));
 
   // Page-specific asset: a site page's own folder, or - for generated product
-  // pages - the engine's shared product-detail asset.
+  // pages - the shared product-detail asset (site-first, then engine).
   if (pageName) {
     if (pageName.startsWith('product-')) {
-      if (fs.existsSync(path.join(GENERATORS_DIR, `product-detail.${kind}`))) {
+      if (resolveGeneratorFile(`product-detail.${kind}`)) {
         files.push(`assets/${kind}/pages/product-detail.${kind}`);
       }
     } else if (fs.existsSync(path.join(PAGES_DIR, pageName, sourceFile))) {
@@ -479,9 +490,9 @@ function copyComponentAssets(kind) {
     }
   });
 
-  // Engine-provided product-detail asset (shared by generated product pages).
-  const productDetailAsset = path.join(GENERATORS_DIR, `product-detail.${kind}`);
-  if (fs.existsSync(productDetailAsset)) {
+  // Shared product-detail asset for generated product pages (site-first, engine fallback).
+  const productDetailAsset = resolveGeneratorFile(`product-detail.${kind}`);
+  if (productDetailAsset) {
     fs.copyFileSync(productDetailAsset, path.join(buildPagesAssetDir, `product-detail.${kind}`));
   }
 }
@@ -549,10 +560,11 @@ console.log('[JS] Component scripts copied to build/assets/js/\n');
 // Copy collections (products, custom items, etc.) from shared folder
 copyCollections();
 
-// Execute page generators. They run from the engine and the site (engine
-// first, so a site generator can shadow a page by re-emitting it); each writes
-// page JSON into GENERATED_PAGES_DIR and returns the files it wrote, which we
-// build alongside the pages found under pages/.
+// Execute page generators from the engine and the site. Generators resolve
+// site-first by filename: a site generator (SITE_ROOT/generators) shadows the
+// engine generator with the same name, and new site generators are added. Each
+// writes page JSON into GENERATED_PAGES_DIR and returns the files it wrote, which
+// we build alongside the pages found under pages/.
 //
 // Contract: module.exports = { generate(ctx) }. (The pre-0.2
 // generateProductPages(outputDir) contract was removed in v0.2.1; see
@@ -565,50 +577,61 @@ const generatorContext = {
   outputDir: GENERATED_PAGES_DIR,
   lib: { slugify, escapeHtml, raw }
 };
+// Resolve generators site-first by filename: a site generator shadows the engine
+// generator with the same name (mirrors site-first component resolution); a site
+// generator with a new name is simply added. Engine is listed first, so the later
+// site entry overwrites it in the map.
 const generatorRoots = [GENERATORS_DIR, path.join(SITE_ROOT, 'generators')];
-const seenGeneratedFiles = new Set();
-
+const generatorScripts = new Map(); // filename -> absolute path (site wins)
 generatorRoots.forEach(genDir => {
   if (!fs.existsSync(genDir)) return;
-  const scripts = fs.readdirSync(genDir).filter(f => f.endsWith('.build.js'));
-  if (scripts.length === 0) return;
-  console.log(`[PAGE-SCRIPTS] Running ${scripts.length} generator(s) from ${path.relative(SITE_ROOT, genDir) || '.'}`);
+  fs.readdirSync(genDir)
+    .filter(f => f.endsWith('.build.js'))
+    .forEach(f => generatorScripts.set(f, path.resolve(path.join(genDir, f))));
+});
+if (generatorScripts.size) {
+  console.log(`[PAGE-SCRIPTS] Running ${generatorScripts.size} generator(s) (site-first)`);
+}
 
-  scripts.forEach(scriptFile => {
-    try {
-      const scriptPath = path.resolve(path.join(genDir, scriptFile));
-      delete require.cache[scriptPath];
-      const mod = require(scriptPath);
+// The engine owns ctx.outputDir, so guarantee it exists before any generator
+// runs - generators can then write into it without each mkdir-ing, independent
+// of run order.
+fs.mkdirSync(GENERATED_PAGES_DIR, { recursive: true });
 
-      let generated;
-      if (typeof mod.generate === 'function') {
-        generated = mod.generate(generatorContext);
-      } else if (typeof mod.generateProductPages === 'function') {
-        // The pre-0.2 generateProductPages(outputDir) contract was removed in
-        // v0.2.1. Fail loud with a migration pointer instead of silently skipping.
-        console.error(`[ERROR] Generator ${scriptFile} uses the removed `
-          + `generateProductPages(outputDir) contract - migrate to generate(ctx); `
-          + `see docs/generator-migration.md`);
-        buildErrors++;
-        return;
-      } else {
-        console.log(`  [WARNING] ${scriptFile}: no generate(ctx) export`);
-        return;
-      }
+const seenGeneratedFiles = new Set();
+generatorScripts.forEach((scriptPath, scriptFile) => {
+  try {
+    delete require.cache[scriptPath];
+    const mod = require(scriptPath);
 
-      (Array.isArray(generated) ? generated : []).forEach(p => {
-        const base = path.basename(p);
-        if (seenGeneratedFiles.has(base)) {
-          console.log(`  [WARNING] generator output collision (last wins): ${base}`);
-        }
-        seenGeneratedFiles.add(base);
-        generatedPageFiles.push(p);
-      });
-    } catch (error) {
-      console.error(`[ERROR] Generator ${scriptFile} failed:`, error.message);
+    let generated;
+    if (typeof mod.generate === 'function') {
+      generated = mod.generate(generatorContext);
+    } else if (typeof mod.generateProductPages === 'function') {
+      // The pre-0.2 generateProductPages(outputDir) contract was removed in
+      // v0.2.1. Fail loud with a migration pointer instead of silently skipping.
+      console.error(`[ERROR] Generator ${scriptFile} uses the removed `
+        + `generateProductPages(outputDir) contract - migrate to generate(ctx); `
+        + `see docs/generator-migration.md`);
       buildErrors++;
+      return;
+    } else {
+      console.log(`  [WARNING] ${scriptFile}: no generate(ctx) export`);
+      return;
     }
-  });
+
+    (Array.isArray(generated) ? generated : []).forEach(p => {
+      const base = path.basename(p);
+      if (seenGeneratedFiles.has(base)) {
+        console.log(`  [WARNING] generator output collision (last wins): ${base}`);
+      }
+      seenGeneratedFiles.add(base);
+      generatedPageFiles.push(p);
+    });
+  } catch (error) {
+    console.error(`[ERROR] Generator ${scriptFile} failed:`, error.message);
+    buildErrors++;
+  }
 });
 if (generatedPageFiles.length) console.log('');
 

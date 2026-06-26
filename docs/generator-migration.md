@@ -1,10 +1,12 @@
 # Generator contract — v0.2 migration
 
 As of v0.2, page generators use a neutral contract and can live in **either** the
-engine (`generators/`) or a **site** (`SITE_ROOT/generators/`). The engine runs
-both (engine first), so a site can add its own generators or shadow an
-engine-produced page by re-emitting the same `page` name (last write wins; the
-engine warns on a filename collision).
+engine (`generators/`) or a **site** (`SITE_ROOT/generators/`). Generators resolve
+**site-first by filename** (v0.2.1): a site generator shadows the engine generator
+of the same name, and a new-named site generator is simply added. The
+`generators/product-detail.css|js` page assets resolve site-first too. (Two
+*different* generators that emit the same `page` name still collide — last write
+wins, with a warning.)
 
 ## The contract
 

@@ -24,12 +24,13 @@ function done() {
 
 console.log('Smoke test: building example/ site...');
 let buildOk = true;
+let buildOut = '';
 try {
-  execSync('node cli.js build --site example', { cwd: root, stdio: 'pipe' });
+  buildOut = execSync('node cli.js build --site example', { cwd: root, stdio: 'pipe' }).toString();
 } catch (e) {
   buildOk = false;
-  process.stderr.write(((e.stdout || '') + '').toString());
-  process.stderr.write(((e.stderr || '') + '').toString());
+  buildOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
+  process.stderr.write(buildOut);
 }
 check('build exits 0', buildOk);
 
@@ -60,5 +61,18 @@ check('site sub-component renders (declared priceRow)', index.includes('class="p
 // pages via generate(ctx); the pricing build script used the helpers (raw) - if
 // helpers weren't passed it would have thrown and failed the build.
 check('site generator emitted pages', fs.readdirSync(buildDir).some(f => /^news-.*\.html$/.test(f)));
+
+// v0.2.1: generators resolve site-first by filename. example/generators ships its
+// own generate-custom.build.js (same name as the engine's). The site one must run
+// and the engine's must be shadowed (its "[CUSTOM-PAGES]" log must not appear).
+check('site generator shadows engine one (site ran)', fs.existsSync(path.join(buildDir, 'custom-demo.html')));
+check('site generator shadows engine one (engine skipped)',
+  buildOut.includes('[EXAMPLE-CUSTOM]') && !buildOut.includes('[CUSTOM-PAGES]'));
+// v0.2.1: product-detail.css/js resolve site-first too. example/generators ships a
+// product-detail.css whose marker must reach the built product pages' asset.
+const productDetailCss = path.join(buildDir, 'assets', 'css', 'pages', 'product-detail.css');
+check('product-detail asset resolves site-first',
+  fs.existsSync(productDetailCss) &&
+  fs.readFileSync(productDetailCss, 'utf8').includes('product-detail-site-marker'));
 
 done();
