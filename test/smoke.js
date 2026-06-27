@@ -6,6 +6,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { standardChecks } = require('../lib/checks');
+const { resolveGenerator } = require('../lib/generators');
 
 const root = path.join(__dirname, '..');
 const siteDir = path.join(root, 'example');
@@ -74,5 +75,20 @@ const productDetailCss = path.join(buildDir, 'assets', 'css', 'pages', 'product-
 check('product-detail asset resolves site-first',
   fs.existsSync(productDetailCss) &&
   fs.readFileSync(productDetailCss, 'utf8').includes('product-detail-site-marker'));
+
+// Generator restructure - Phase 1: resolveGenerator(name) maps a registry name to a
+// file, merging the engine + site generators/registry.json (site wins) then resolving
+// the file site-first. Not yet wired into the build pipeline.
+const genDirs = {
+  engineGeneratorsDir: path.join(root, 'generators'),
+  siteGeneratorsDir: path.join(siteDir, 'generators')
+};
+check('resolver: engine-registered name -> engine file',
+  resolveGenerator('products', genDirs) === path.join(root, 'generators', 'generate-products.build.js'));
+check('resolver: file resolves site-first when the site has one',
+  resolveGenerator('custom', genDirs) === path.join(siteDir, 'generators', 'generate-custom.build.js'));
+check('resolver: site registry adds/overrides a name',
+  resolveGenerator('latest', genDirs) === path.join(siteDir, 'generators', 'news.build.js'));
+check('resolver: unknown name -> null', resolveGenerator('does-not-exist', genDirs) === null);
 
 done();
