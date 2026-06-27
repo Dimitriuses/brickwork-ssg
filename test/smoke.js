@@ -113,4 +113,22 @@ check('underscore-prefixed template still discovered',
 check('underscore-prefixed normal page excluded',
   !fs.existsSync(path.join(buildDir, 'draft.html')) && !fs.existsSync(path.join(buildDir, '_draft.html')));
 
+// Generator restructure - Phase 4: build-time validation (loud errors). Building the
+// invalid-fixtures site must FAIL (non-zero exit) with a clear message per problem.
+let invalidExit = 0;
+let invalidOut = '';
+try {
+  invalidOut = execSync('node cli.js build --site test/fixtures/invalid', { cwd: root, stdio: 'pipe' }).toString();
+} catch (e) {
+  invalidExit = e.status || 1;
+  invalidOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
+}
+check('invalid templates fail the build (non-zero exit)', invalidExit !== 0);
+check('validation: missing generator', /generatorOptions\.generator is required/.test(invalidOut));
+check('validation: missing pageName', /generatorOptions\.pageName is required/.test(invalidOut));
+check('validation: unknown generator', /unknown generator "nope-gen"/.test(invalidOut));
+check('validation: source collection not found', /source collection "nope" not found/.test(invalidOut));
+check('validation: source collection disabled', /source collection "off" is disabled/.test(invalidOut));
+check('validation: page-name collision', /page name collision: "dup\.html"/.test(invalidOut));
+
 done();

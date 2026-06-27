@@ -263,12 +263,23 @@ function buildComponent(componentName, vars = {}, buildStack = []) {
   return html;
 }
 
+// Final output page names seen this build, to catch collisions (two pages - normal
+// or template-generated - resolving to the same <page>.html).
+const builtPageNames = new Set();
+
 // Function to build a page
 function buildPage(pageConfig, pageName) {
-  const pageData = typeof pageConfig === 'string' 
+  const pageData = typeof pageConfig === 'string'
     ? JSON.parse(fs.readFileSync(pageConfig, 'utf8'))
     : pageConfig;
-  
+
+  // Loud build-time check: a page name must be produced only once.
+  if (builtPageNames.has(pageData.page)) {
+    console.error(`[ERROR] page name collision: "${pageData.page}.html" is produced more than once`);
+    buildErrors++;
+  }
+  builtPageNames.add(pageData.page);
+
   // Load layout
   const layout = loadComponent(pageData.layout || '_layout');
   
@@ -402,26 +413,34 @@ function buildPage(pageConfig, pageName) {
 //   ctx = { siteRoot, engineRoot, buildDir, lib:{slugify,escapeHtml,raw}, collection:{dir,webPath} }
 function expandTemplatePage(templateFile, templateConfig) {
   const opts = templateConfig.generatorOptions || {};
+  const label = path.basename(templateFile);
+  const fail = (message) => { console.error(`[ERROR] Template ${label}: ${message}`); buildErrors++; return 0; };
+
+  // Validate generatorOptions (loud, build-failing).
+  if (!opts.generator) return fail('generatorOptions.generator is required');
+  if (!opts.pageName) return fail('generatorOptions.pageName is required');
+
   const generatorPath = resolveGenerator(opts.generator, {
     engineGeneratorsDir: GENERATORS_DIR,
     siteGeneratorsDir: path.join(SITE_ROOT, 'generators')
   });
-  if (!generatorPath) {
-    console.error(`[ERROR] Template ${path.basename(templateFile)}: unknown generator "${opts.generator}"`);
-    buildErrors++;
-    return 0;
+  if (!generatorPath) return fail(`unknown generator "${opts.generator}" (check generators/registry.json)`);
+
+  // Resolve + validate the source collection (when one is named).
+  let ctxCollection = { dir: null, webPath: null };
+  if (opts.source) {
+    const collection = (database.collections || []).find(c => c.name === opts.source);
+    if (!collection) return fail(`source collection "${opts.source}" not found in database.json`);
+    if (!collection.enabled) return fail(`source collection "${opts.source}" is disabled`);
+    ctxCollection = { dir: path.join(BUILD_DIR, collection.destination), webPath: collection.destination };
   }
 
-  // Resolve the collection named by opts.source to its post-copy build folder + web path.
-  const collection = (database.collections || []).find(c => c.name === opts.source);
   const ctx = {
     siteRoot: SITE_ROOT,
     engineRoot: ENGINE_ROOT,
     buildDir: BUILD_DIR,
     lib: { slugify, escapeHtml, raw },
-    collection: collection
-      ? { dir: path.join(BUILD_DIR, collection.destination), webPath: collection.destination }
-      : { dir: null, webPath: null }
+    collection: ctxCollection
   };
 
   delete require.cache[generatorPath];
