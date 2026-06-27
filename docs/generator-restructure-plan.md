@@ -175,12 +175,16 @@ Each phase is independently testable via the engine's `example/` fixture + smoke
   existing top-level page-folder copy already covers non-`_` template folders;
   the generated page config carries its template's asset base for the link side.
 
-### Phase 6 — Collapse built-ins + docs
-- Optionally merge `generate-products` + `generate-custom` into one generic
-  `generate-collection` driven by two template pages (`product-detail`,
-  `custom-detail`) that differ only by `generatorOptions` + HTML.
-- Update `docs/generator-migration.md` (new contract + template-page model),
-  `CLAUDE.md`, and `docs/extensibility.md`.
+### Phase 6 — Docs (the built-in merge already happened in Phase 3)
+- **Already done in Phase 3:** the merge bullet of this phase is implemented.
+  Externalizing `source` / `pageName` / template made `generate-products` and
+  `generate-custom` identical, so they were collapsed into a single data-only
+  `generators/generate-detail.js`, registered under **both** `products` and `custom`
+  and driven by the `product-detail` / `_custom-detail` template pages (per the
+  cardinality decision — N templates, 1 generator).
+- **Remaining (the actual work of this phase):** update the docs to the new model —
+  `docs/generator-migration.md` (data-only `generate(ctx, options)` contract +
+  template-page model), `CLAUDE.md`, and `docs/extensibility.md`.
 
 ### Phase 7 — Site migration (separate repos, after the engine merges)
 - Private site and demo: move templates into `pages/`, add `generators/registry.json`,
