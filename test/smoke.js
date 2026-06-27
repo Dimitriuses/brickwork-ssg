@@ -105,6 +105,10 @@ check('built-in generator filled the detail template (carousel + title)',
   productHtml.includes('carousel-item') && productHtml.includes('product-detail-title'));
 check('detail template integrates contactIcons (no leftover placeholder)',
   !productHtml.includes('{{COMPONENT:contactIcons}}'));
+// Phase 5: page assets are generalized - the built-in detail page links its template
+// folder's asset via the same assetsFrom path as any template (no product- special case).
+check('detail page links its template-folder asset (generalized)',
+  /assets\/css\/pages\/product-detail\.css/.test(productHtml));
 // A "_"-prefixed TEMPLATE page (_custom-detail) is still discovered (the "_" is just a
 // comment); it drives the "custom" built-in over the custom collection.
 check('underscore-prefixed template still discovered',

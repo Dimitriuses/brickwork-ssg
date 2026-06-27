@@ -487,17 +487,6 @@ const ASSET_KINDS = {
   js: { sourceFile: 'script.js', base: ['header'] }
 };
 
-// Resolve a generator-adjacent file (e.g. product-detail.css/js) site-first:
-// SITE_ROOT/generators/<filename> shadows the engine's generators/<filename>.
-function resolveGeneratorFile(filename) {
-  const candidates = [
-    path.join(SITE_ROOT, 'generators', filename),
-    path.join(GENERATORS_DIR, filename)
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  return null;
-}
-
 function collectComponentAssets(kind, components, pageName, assetBase) {
   const { sourceFile, base } = ASSET_KINDS[kind];
   const files = [`assets/${kind}/global.${kind}`];
@@ -520,23 +509,13 @@ function collectComponentAssets(kind, components, pageName, assetBase) {
   base.forEach(addComponent);
   (components || []).forEach(comp => addComponent(comp.name));
 
-  // Page-specific asset: for a template-driven generated page, the template page's
-  // own asset (assetBase = its folder); else a site page's own folder; else - for the
-  // legacy product pages - the shared product-detail asset (site-first, then engine).
-  if (assetBase) {
-    // copyComponentAssets names the file after the folder with any leading "_" stripped.
-    const assetName = assetBase.replace(/^_/, '');
-    if (fs.existsSync(path.join(PAGES_DIR, assetBase, sourceFile))) {
-      files.push(`assets/${kind}/pages/${assetName}.${kind}`);
-    }
-  } else if (pageName) {
-    if (pageName.startsWith('product-')) {
-      if (resolveGeneratorFile(`product-detail.${kind}`)) {
-        files.push(`assets/${kind}/pages/product-detail.${kind}`);
-      }
-    } else if (fs.existsSync(path.join(PAGES_DIR, pageName, sourceFile))) {
-      files.push(`assets/${kind}/pages/${pageName}.${kind}`);
-    }
+  // Page-specific asset: a template-driven generated page links its template page's
+  // own asset (assetBase = the template folder); a normal page links its own folder's
+  // asset. Either is copied from the page folder by copyComponentAssets, which names
+  // the file after the folder with any leading "_" stripped.
+  const assetFolder = assetBase || pageName;
+  if (assetFolder && fs.existsSync(path.join(PAGES_DIR, assetFolder, sourceFile))) {
+    files.push(`assets/${kind}/pages/${assetFolder.replace(/^_/, '')}.${kind}`);
   }
 
   return files;
@@ -546,8 +525,8 @@ const collectComponentCSS = (components, pageName, assetBase) => collectComponen
 const collectComponentJS = (components, pageName, assetBase) => collectComponentAssets('js', components, pageName, assetBase);
 
 // Copy assets of one kind ('css' or 'js') into build/: the global file, every
-// component's asset, each site page folder's asset, and the engine's shared
-// product-detail asset used by generated product pages.
+// component's asset, and each page folder's asset (named after the folder, leading
+// "_" stripped). Template-driven pages link their template folder's asset from here.
 function copyComponentAssets(kind) {
   const { sourceFile } = ASSET_KINDS[kind];
   const buildAssetDir = path.join(BUILD_DIR, 'assets', kind);
@@ -579,12 +558,6 @@ function copyComponentAssets(kind) {
       fs.copyFileSync(pageAssetFile, path.join(buildPagesAssetDir, fileName));
     }
   });
-
-  // Shared product-detail asset for generated product pages (site-first, engine fallback).
-  const productDetailAsset = resolveGeneratorFile(`product-detail.${kind}`);
-  if (productDetailAsset) {
-    fs.copyFileSync(productDetailAsset, path.join(buildPagesAssetDir, `product-detail.${kind}`));
-  }
 }
 
 const copyComponentCSS = () => copyComponentAssets('css');
