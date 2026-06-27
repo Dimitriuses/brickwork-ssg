@@ -68,7 +68,7 @@ Clone a site with its engine in one step: `git clone --recurse-submodules <site-
 - **Overrides** — drop a same-named file in your site's `components/` to override
   any engine component or the layout, without forking engine logic.
 - **Collections** — `shared/database.json` maps data folders (e.g. `products/`)
-  into the build; product detail pages are generated automatically.
+  into the build; a template page turns each item into a generated detail page.
 - **Safe templating** — values are HTML-escaped by default (`raw()` opt-out),
   ids are slugified, and the build exits non-zero on any page failure.
 
@@ -85,9 +85,11 @@ A site can add its own components, generators, and tests — no engine fork need
   (`"subComponents": ["..."]`), and optionally map names to folders in
   `components/registry.json`. Build scripts receive
   `build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw })`.
-- **Generators** — add `generators/<name>.build.js` exporting `{ generate(ctx) }`
-  (`ctx = { siteRoot, engineRoot, buildDir, outputDir, lib }`) that writes page
-  JSON into `ctx.outputDir`. See [docs/generator-migration.md](docs/generator-migration.md).
+- **Generators** — a **template page** (a `pages/` config with `generatorOptions`)
+  names a data-only generator that returns one descriptor per item; the engine
+  assembles a page each. Add `generators/<name>.js` exporting
+  `{ generate(ctx, options) }` (returns `[{ slug, title, description, vars }]`) and map
+  it in `generators/registry.json`. See [docs/generator-migration.md](docs/generator-migration.md).
 - **Tests** — add `test/<name>.test.js` (`module.exports = (ctx) => { ctx.check(...) }`);
   `ssg test` builds the site, runs reusable standard checks, then your tests.
 

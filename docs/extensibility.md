@@ -46,6 +46,14 @@ Touch points:
 
 ### 3. Generic generator contract
 
+> **Superseded — read [docs/generator-migration.md](generator-migration.md) for the current model.**
+> The contract below is the v0.2 design (auto-run generators that emit page JSON). The
+> generator subsystem was later **restructured** to page-driven generation: generators
+> are **data-only** (`generate(ctx, options) -> [{ slug, title, description, vars }]`),
+> referenced **by name** from a *template page* (a `pages/` config with `generatorOptions`)
+> via `generators/registry.json` — there is no auto-run scan, and the engine assembles one
+> page per item. The rest of this document (components, sub-components, tests) is current.
+
 Today a generator must export a function literally named `generateProductPages`. Replace with a neutral contract:
 
 ```js

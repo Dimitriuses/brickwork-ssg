@@ -1,56 +1,94 @@
-# Generator contract — v0.2 migration
+# Generator contract & migration
 
-As of v0.2, page generators use a neutral contract and can live in **either** the
-engine (`generators/`) or a **site** (`SITE_ROOT/generators/`). Generators resolve
-**site-first by filename** (v0.2.1): a site generator shadows the engine generator
-of the same name, and a new-named site generator is simply added. The
-`generators/product-detail.css|js` page assets resolve site-first too. (Two
-*different* generators that emit the same `page` name still collide — last write
-wins, with a warning.)
+Page generation is **declared by a page**. A *template page* under `pages/` names a
+generator and how to drive it; the engine resolves the generator **by name** (via
+`generators/registry.json`), runs it once to get a list of item descriptors, and
+assembles one page per item from the template's HTML + layout + components.
 
-## The contract
+- **Template page** — `pages/<name>/<name>.json` carrying a `generatorOptions` object,
+  plus `<name>.html` (the per-item content template) and optional `style.css`/`script.js`.
+- **Generator** — `generators/<file>.js`, **data only**:
+  `generate(ctx, options) -> [{ slug, title, description, vars }]`.
+- **Registry** — `generators/registry.json` maps `name -> file`. The engine ships
+  defaults; a site's `generators/registry.json` is merged over them (site wins), and a
+  mapped file resolves site-first.
+
+## Template page
+
+```jsonc
+// pages/product-detail/product-detail.json   (a leading "_" is allowed - it is only a
+//                                              comment, never used for discovery or names)
+{
+  "generatorOptions": {
+    "generator": "products",          // -> generators/registry.json
+    "pageName": "product-{slug}",      // {slug} comes from the generator
+    "source": "products"               // a collection in shared/database.json (optional)
+  },
+  "layout": "_layout",                 // ordinary page settings live outside generatorOptions
+  "header_theme": "dark",
+  "components": [ { "name": "contactIcons" } ]   // built into every generated page
+}
+// product-detail.html    -> content template, filled per item with the item's vars
+// style.css / script.js  -> linked into every page this template produces
+```
+
+A config is a **template** iff it has a `generatorOptions` object (found regardless of any
+leading `_`). A `_`-prefixed **non-template** page is excluded from the build.
+
+## The generator contract
 
 ```js
-// generators/<name>.build.js
+// generators/<file>.js  — DATA ONLY (no template, no page JSON, no file writes)
 module.exports = {
-  generate(ctx) {
-    // ctx = {
-    //   siteRoot,     // absolute path to the site being built
-    //   engineRoot,   // absolute path to the engine
-    //   buildDir,     // absolute path to the site's build/ output
-    //   outputDir,    // scratch dir to write page JSON into (built then removed)
-    //   lib: { slugify, escapeHtml, raw }
-    // }
-    // Write one JSON file per page into ctx.outputDir; return the list of paths.
-    return [writtenPath, ...];
+  generate(ctx, options) {
+    // ctx = { siteRoot, engineRoot, buildDir,
+    //         lib: { slugify, escapeHtml, raw },
+    //         collection: { dir, webPath } }   // resolved from options.source
+    // options = the template's generatorOptions
+    return [
+      { slug: 'red-brick', title: 'Red Brick', description: '…',
+        vars: { /* values for the template's {{PLACEHOLDERS}} */ } }
+    ];
   }
 };
 ```
 
-Each emitted JSON is a page config (`{ page, title, layout, components, content, ... }`),
-the same shape `pages/<name>/<name>.json` uses. The engine builds each into
-`build/<page>.html`.
+- `vars` text is HTML-escaped by the engine; insert HTML fragments with `ctx.lib.raw(...)`.
+- Read collection data from `ctx.collection.dir` (post-collection-copy under `build/`) and
+  build image URLs under `ctx.collection.webPath` (the collection's `destination`).
+- The engine derives each page name from `generatorOptions.pageName` (substituting `{slug}`),
+  inherits the template's `layout` / `header_theme` / `components`, fills the template HTML,
+  and builds it through the normal page pipeline.
 
-## The legacy contract was removed in v0.2.1
+## Build-time validation (loud errors)
 
-The original contract — `module.exports = { generateProductPages(outputDir) }` —
-was supported through **v0.2.0** and **removed in v0.2.1**. A generator that
-exports only `generateProductPages` now **fails the build** with a pointer to
-this document, instead of silently doing nothing. Migrate it to `generate(ctx)`:
+The build **fails** with a clear message on: a `generatorOptions` missing `generator` or
+`pageName`; an unknown generator name (registry miss); a `source` naming a missing or
+disabled collection; or two pages resolving to the same `<page>.html` (name collision).
 
-| Before (removed) | Now |
+## Migrating an older generator
+
+### From the interim `generate(ctx)` that emitted page JSON
+
+| Before | Now |
 |---|---|
-| `function generateProductPages(outputDir)` | `generate(ctx)` |
-| `outputDir` | `ctx.outputDir` |
-| `'build/products'` (cwd-relative) | `path.join(ctx.buildDir, 'products')` |
-| `require('../lib/slugify')` / `require('../lib/html')` | `ctx.lib.slugify` / `ctx.lib.escapeHtml` / `ctx.lib.raw` |
-| `module.exports = { generateProductPages }` | `module.exports = { generate }` |
+| owns its HTML template (read via `__dirname`) | template moves to a `pages/<name>/` **template page** |
+| writes `{ page, title, layout, components, content }` JSON to `ctx.outputDir` | returns `[{ slug, title, description, vars }]` |
+| computes the page name itself (e.g. `product-<id>`) | engine applies `generatorOptions.pageName` to each `slug` |
+| reads `path.join(ctx.buildDir, '<dest>')` | reads `ctx.collection.dir` (named by `generatorOptions.source`) |
+| auto-run by scanning `generators/*.build.js` | referenced **by name** from a template page (`generators/registry.json`) |
+| file named `*.build.js` | file named `*.js` (the `.build.js` auto-run scan is gone) |
 
-Nothing else changes — still return the array of written file paths.
+The two built-in generators (`generate-products`, `generate-custom`) became identical once
+the template and source were externalized, so they are now a single `generators/generate-detail.js`
+registered under both `products` and `custom`.
+
+### From the original `generateProductPages(outputDir)`
+
+That contract was removed in v0.2.1; migrate to the data-only contract above.
 
 ## Component build scripts
 
-Related change: component `.build.js` scripts now receive the same helper surface
-as a 4th argument — `build(vars, loadComponent, replaceVariables, helpers)` where
-`helpers = { slugify, escapeHtml, raw }`. This is additive; existing 3-argument
-build scripts are unaffected.
+Unrelated to generators but on the same helper surface: component `.build.js` scripts
+receive `build(vars, loadComponent, replaceVariables, helpers)` where
+`helpers = { slugify, escapeHtml, raw }`. Additive; existing 3-argument scripts are unaffected.
