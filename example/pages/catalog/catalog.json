@@ -1,0 +1,12 @@
+{
+  "generatorOptions": {
+    "generator": "collection",
+    "pageName": "catalog-{slug}",
+    "source": "products"
+  },
+  "layout": "_layout",
+  "header_theme": "dark",
+  "components": [
+    { "name": "pricing", "vars": { "PRICING_TITLE": "Plans", "PLANS": [ { "name": "Basic", "price": "$9" }, { "name": "Pro", "price": "$29" } ] } }
+  ]
+}

@@ -1,3 +1,4 @@
 {
-  "latest": "news.build.js"
+  "latest": "news.build.js",
+  "collection": "generate-collection.js"
 }

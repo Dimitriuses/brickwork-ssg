@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { RawHtml, raw, escapeHtml } = require('./lib/html');
 const { slugify } = require('./lib/slugify');
+const { resolveGenerator } = require('./lib/generators');
 
 // Path roots. The engine (this script, components, lib, layout) is shared by
 // every site; the site being built is the current working directory. Splitting
@@ -360,14 +361,15 @@ function buildPage(pageConfig, pageName) {
   // Build footer
   const footerHtml = buildComponent('footer', flatConfig);
   
-  // Collect all CSS files (including page-specific)
-  const cssFiles = collectComponentCSS(pageData.components || [], pageData.page);
-  const cssLinks = cssFiles.map(file => 
+  // Collect all CSS files (including page-specific). `assetsFrom`, set on generated
+  // pages from a template, links the template page's own asset.
+  const cssFiles = collectComponentCSS(pageData.components || [], pageData.page, pageData.assetsFrom);
+  const cssLinks = cssFiles.map(file =>
     `  <link href="${file}" rel="stylesheet">`
   ).join('\n');
-  
+
   // Collect all JavaScript files (including page-specific)
-  const jsFiles = collectComponentJS(pageData.components || [], pageData.page);
+  const jsFiles = collectComponentJS(pageData.components || [], pageData.page, pageData.assetsFrom);
   const jsScripts = jsFiles.map(file =>
     `  <script src="${file}"></script>`
   ).join('\n');
@@ -395,6 +397,72 @@ function buildPage(pageConfig, pageName) {
   console.log(`[BUILD] ${pageData.page}.html - "${pageData.title}"`);
 }
 
+// Expand a TEMPLATE page (one carrying generatorOptions) into one built page per
+// item. Resolves the named generator, runs its data-only generate(ctx, options),
+// then for each item fills the template HTML with item.vars and builds it via
+// buildPage. The template's own folder asset is linked through `assetsFrom`.
+// Generator contract (Phase 2):
+//   module.exports = { generate(ctx, options) -> [{ slug, title, description, vars }] }
+//   ctx = { siteRoot, engineRoot, buildDir, lib:{slugify,escapeHtml,raw}, collection:{dir,webPath} }
+function expandTemplatePage(templateFile, templateConfig) {
+  const opts = templateConfig.generatorOptions || {};
+  const generatorPath = resolveGenerator(opts.generator, {
+    engineGeneratorsDir: GENERATORS_DIR,
+    siteGeneratorsDir: path.join(SITE_ROOT, 'generators')
+  });
+  if (!generatorPath) {
+    console.error(`[ERROR] Template ${path.basename(templateFile)}: unknown generator "${opts.generator}"`);
+    buildErrors++;
+    return 0;
+  }
+
+  // Resolve the collection named by opts.source to its post-copy build folder + web path.
+  const collection = (database.collections || []).find(c => c.name === opts.source);
+  const ctx = {
+    siteRoot: SITE_ROOT,
+    engineRoot: ENGINE_ROOT,
+    buildDir: BUILD_DIR,
+    lib: { slugify, escapeHtml, raw },
+    collection: collection
+      ? { dir: path.join(BUILD_DIR, collection.destination), webPath: collection.destination }
+      : { dir: null, webPath: null }
+  };
+
+  delete require.cache[generatorPath];
+  const mod = require(generatorPath);
+  if (typeof mod.generate !== 'function') {
+    console.error(`[ERROR] Generator "${opts.generator}" has no generate(ctx, options) export`);
+    buildErrors++;
+    return 0;
+  }
+  const items = mod.generate(ctx, opts) || [];
+
+  // Template HTML lives beside the config: <dir>/<name>.html. Filled per item.
+  const templateDir = path.dirname(templateFile);
+  const htmlPath = path.join(templateDir, `${path.basename(templateFile, '.json')}.html`);
+  const templateHtml = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf8') : '';
+  const assetsFrom = path.basename(templateDir); // template folder owns the page asset
+
+  let built = 0;
+  items.forEach(item => {
+    const pageName = String(opts.pageName || '{slug}').replace(/\{slug\}/g, item.slug);
+    const pageConfig = {
+      page: pageName,
+      title: item.title,
+      description: item.description,
+      layout: templateConfig.layout || '_layout',
+      header_theme: templateConfig.header_theme,
+      components: templateConfig.components || [],
+      content: replaceVariables(templateHtml, item.vars || {}),
+      assetsFrom
+    };
+    buildPage(pageConfig, pageName);
+    built++;
+  });
+  console.log(`[TEMPLATE] ${path.basename(templateDir)}: built ${built} page(s) via "${opts.generator}"`);
+  return built;
+}
+
 // Collect the CSS/JS files a page needs: global, each used component (with its
 // dependencies, depth-first) plus the always-present base components, and any
 // page-specific asset. `kind` is 'css' or 'js'; they differ only in the source
@@ -415,7 +483,7 @@ function resolveGeneratorFile(filename) {
   return null;
 }
 
-function collectComponentAssets(kind, components, pageName) {
+function collectComponentAssets(kind, components, pageName, assetBase) {
   const { sourceFile, base } = ASSET_KINDS[kind];
   const files = [`assets/${kind}/global.${kind}`];
   const added = new Set();
@@ -437,9 +505,16 @@ function collectComponentAssets(kind, components, pageName) {
   base.forEach(addComponent);
   (components || []).forEach(comp => addComponent(comp.name));
 
-  // Page-specific asset: a site page's own folder, or - for generated product
-  // pages - the shared product-detail asset (site-first, then engine).
-  if (pageName) {
+  // Page-specific asset: for a template-driven generated page, the template page's
+  // own asset (assetBase = its folder); else a site page's own folder; else - for the
+  // legacy product pages - the shared product-detail asset (site-first, then engine).
+  if (assetBase) {
+    // copyComponentAssets names the file after the folder with any leading "_" stripped.
+    const assetName = assetBase.replace(/^_/, '');
+    if (fs.existsSync(path.join(PAGES_DIR, assetBase, sourceFile))) {
+      files.push(`assets/${kind}/pages/${assetName}.${kind}`);
+    }
+  } else if (pageName) {
     if (pageName.startsWith('product-')) {
       if (resolveGeneratorFile(`product-detail.${kind}`)) {
         files.push(`assets/${kind}/pages/product-detail.${kind}`);
@@ -452,8 +527,8 @@ function collectComponentAssets(kind, components, pageName) {
   return files;
 }
 
-const collectComponentCSS = (components, pageName) => collectComponentAssets('css', components, pageName);
-const collectComponentJS = (components, pageName) => collectComponentAssets('js', components, pageName);
+const collectComponentCSS = (components, pageName, assetBase) => collectComponentAssets('css', components, pageName, assetBase);
+const collectComponentJS = (components, pageName, assetBase) => collectComponentAssets('js', components, pageName, assetBase);
 
 // Copy assets of one kind ('css' or 'js') into build/: the global file, every
 // component's asset, each site page folder's asset, and the engine's shared
@@ -662,10 +737,29 @@ function findPageFiles(dir) {
 
 findPageFiles(PAGES_DIR);
 
-// Generated pages (from generators) are built alongside the scanned pages.
-const allPageFiles = [...pageFiles, ...generatedPageFiles];
+// Partition scanned pages: a config carrying a `generatorOptions` object is a
+// TEMPLATE page (expanded per item by its generator, not built literally); the rest
+// are normal pages. (Phase 2 is additive - the legacy generator dispatch above still
+// runs; Phase 3 removes it and makes template pages the sole generation path.)
+const normalPageFiles = [];
+const templatePages = [];
+for (const pageFile of pageFiles) {
+  let cfg;
+  try {
+    cfg = JSON.parse(fs.readFileSync(pageFile, 'utf8'));
+  } catch (error) {
+    console.error(`[ERROR] Failed to parse ${pageFile}:`, error.message);
+    buildErrors++;
+    continue;
+  }
+  if (cfg && cfg.generatorOptions) templatePages.push({ file: pageFile, config: cfg });
+  else normalPageFiles.push(pageFile);
+}
 
-console.log(`[PAGES] Found ${pageFiles.length} page(s) + ${generatedPageFiles.length} generated page(s) to build\n`);
+// Generated pages (from the legacy dispatch) are built alongside the scanned pages.
+const allPageFiles = [...normalPageFiles, ...generatedPageFiles];
+
+console.log(`[PAGES] Found ${normalPageFiles.length} page(s) + ${generatedPageFiles.length} generated + ${templatePages.length} template(s)\n`);
 
 let pagesBuilt = 0;
 allPageFiles.forEach(pageFile => {
@@ -675,6 +769,16 @@ allPageFiles.forEach(pageFile => {
     pagesBuilt++;
   } catch (error) {
     console.error(`[ERROR] Failed to build ${pageFile}:`, error.message);
+    buildErrors++;
+  }
+});
+
+// Expand each template page into one built page per item (Phase 2 contract).
+templatePages.forEach(({ file, config }) => {
+  try {
+    pagesBuilt += expandTemplatePage(file, config);
+  } catch (error) {
+    console.error(`[ERROR] Failed to expand template ${path.basename(file)}:`, error.message);
     buildErrors++;
   }
 });

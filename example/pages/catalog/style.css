@@ -1,0 +1,4 @@
+/* Template-page asset. Linked into every catalog-* page the `catalog` template
+   produces (via `assetsFrom`), proving page-folder assets reach generated pages.
+   The smoke test asserts this marker reaches build/assets/css/pages/catalog.css. */
+.catalog-item .catalog-marker { display: none; }

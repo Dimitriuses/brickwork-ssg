@@ -91,4 +91,20 @@ check('resolver: site registry adds/overrides a name',
   resolveGenerator('latest', genDirs) === path.join(siteDir, 'generators', 'news.build.js'));
 check('resolver: unknown name -> null', resolveGenerator('does-not-exist', genDirs) === null);
 
+// Generator restructure - Phase 2: a TEMPLATE page (carrying generatorOptions) is
+// expanded by its named generator into one page per item via generate(ctx, options).
+// example/pages/catalog drives the "collection" generator over the products collection.
+const catalog1 = path.join(buildDir, 'catalog-sample-1.html');
+check('template page expanded (one page per item)',
+  fs.existsSync(catalog1) && fs.existsSync(path.join(buildDir, 'catalog-sample-2.html')));
+const catalogHtml = fs.existsSync(catalog1) ? fs.readFileSync(catalog1, 'utf8') : '';
+check('template: generator vars filled (image via collection webPath)',
+  catalogHtml.includes('products/sample-1/p.png'));
+check('template: declared components integrated (pricing)', catalogHtml.includes('class="pricing"'));
+check('template: template-page asset linked', /assets\/css\/pages\/catalog\.css/.test(catalogHtml));
+const catalogCss = path.join(buildDir, 'assets', 'css', 'pages', 'catalog.css');
+check('template: template-page asset copied with marker',
+  fs.existsSync(catalogCss) && fs.readFileSync(catalogCss, 'utf8').includes('catalog-marker'));
+check('template page itself not built literally', !fs.existsSync(path.join(buildDir, 'catalog.html')));
+
 done();
