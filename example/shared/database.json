@@ -1,1 +1,4 @@
-{ "collections": [ { "name": "products", "source": "shared/products", "destination": "products", "enabled": true } ] }
+{ "collections": [
+  { "name": "products", "source": "shared/products", "destination": "products", "enabled": true },
+  { "name": "custom", "source": "shared/custom", "destination": "custom", "enabled": true }
+] }

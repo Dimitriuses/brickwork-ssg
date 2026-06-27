@@ -1,0 +1,6 @@
+{
+  "page": "draft",
+  "title": "Draft (should not build)",
+  "layout": "_layout",
+  "content": "<main class=\"container py-5\">draft</main>"
+}

@@ -20,10 +20,6 @@ const ASSETS_DIR = path.join(SITE_ROOT, 'assets');
 const BUILD_DIR = path.join(SITE_ROOT, 'build');
 const CONFIG_FILE = path.join(SITE_ROOT, 'config.json');
 const DATABASE_FILE = path.join(SITE_ROOT, 'shared', 'database.json');
-// Scratch dir for page JSON emitted by generators. Lives under build/ so it is
-// wiped with each run, and is removed again before the build finishes so it is
-// never shipped. Keeps generated artifacts out of the pages/ source tree.
-const GENERATED_PAGES_DIR = path.join(BUILD_DIR, '_generated-pages');
 
 // Load site configuration
 const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
@@ -635,96 +631,22 @@ console.log('[JS] Component scripts copied to build/assets/js/\n');
 // Copy collections (products, custom items, etc.) from shared folder
 copyCollections();
 
-// Execute page generators from the engine and the site. Generators resolve
-// site-first by filename: a site generator (SITE_ROOT/generators) shadows the
-// engine generator with the same name, and new site generators are added. Each
-// writes page JSON into GENERATED_PAGES_DIR and returns the files it wrote, which
-// we build alongside the pages found under pages/.
-//
-// Contract: module.exports = { generate(ctx) }. (The pre-0.2
-// generateProductPages(outputDir) contract was removed in v0.2.1; see
-// docs/generator-migration.md to migrate.)
-const generatedPageFiles = [];
-const generatorContext = {
-  siteRoot: SITE_ROOT,
-  engineRoot: ENGINE_ROOT,
-  buildDir: BUILD_DIR,
-  outputDir: GENERATED_PAGES_DIR,
-  lib: { slugify, escapeHtml, raw }
-};
-// Resolve generators site-first by filename: a site generator shadows the engine
-// generator with the same name (mirrors site-first component resolution); a site
-// generator with a new name is simply added. Engine is listed first, so the later
-// site entry overwrites it in the map.
-const generatorRoots = [GENERATORS_DIR, path.join(SITE_ROOT, 'generators')];
-const generatorScripts = new Map(); // filename -> absolute path (site wins)
-generatorRoots.forEach(genDir => {
-  if (!fs.existsSync(genDir)) return;
-  fs.readdirSync(genDir)
-    .filter(f => f.endsWith('.build.js'))
-    .forEach(f => generatorScripts.set(f, path.resolve(path.join(genDir, f))));
-});
-if (generatorScripts.size) {
-  console.log(`[PAGE-SCRIPTS] Running ${generatorScripts.size} generator(s) (site-first)`);
-}
-
-// The engine owns ctx.outputDir, so guarantee it exists before any generator
-// runs - generators can then write into it without each mkdir-ing, independent
-// of run order.
-fs.mkdirSync(GENERATED_PAGES_DIR, { recursive: true });
-
-const seenGeneratedFiles = new Set();
-generatorScripts.forEach((scriptPath, scriptFile) => {
-  try {
-    delete require.cache[scriptPath];
-    const mod = require(scriptPath);
-
-    let generated;
-    if (typeof mod.generate === 'function') {
-      generated = mod.generate(generatorContext);
-    } else if (typeof mod.generateProductPages === 'function') {
-      // The pre-0.2 generateProductPages(outputDir) contract was removed in
-      // v0.2.1. Fail loud with a migration pointer instead of silently skipping.
-      console.error(`[ERROR] Generator ${scriptFile} uses the removed `
-        + `generateProductPages(outputDir) contract - migrate to generate(ctx); `
-        + `see docs/generator-migration.md`);
-      buildErrors++;
-      return;
-    } else {
-      console.log(`  [WARNING] ${scriptFile}: no generate(ctx) export`);
-      return;
-    }
-
-    (Array.isArray(generated) ? generated : []).forEach(p => {
-      const base = path.basename(p);
-      if (seenGeneratedFiles.has(base)) {
-        console.log(`  [WARNING] generator output collision (last wins): ${base}`);
-      }
-      seenGeneratedFiles.add(base);
-      generatedPageFiles.push(p);
-    });
-  } catch (error) {
-    console.error(`[ERROR] Generator ${scriptFile} failed:`, error.message);
-    buildErrors++;
-  }
-});
-if (generatedPageFiles.length) console.log('');
+// Page generation is driven by TEMPLATE pages (configs carrying generatorOptions),
+// discovered in the page scan below and expanded via expandTemplatePage. The legacy
+// auto-run dispatch (scan generators/*.build.js and run each) has been removed - a
+// generator now runs only when a template page references it by name.
 
 // Build all pages
 const pageFiles = [];
 
-// Recursively find all .json files in pages directory
+// Recursively find all .json configs under pages/. Underscore-prefixed files and
+// folders are NOT skipped here: a template page (one with generatorOptions) is found
+// regardless of any "_" (the "_" is just an author comment). Underscore-prefixed
+// NON-template pages are excluded later, during classification.
 function findPageFiles(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
 
   entries.forEach(entry => {
-    // Skip underscore-prefixed files and folders: these are templates,
-    // examples, and generator internals (e.g. _example, _product-detail,
-    // _generators), not pages to build.
-    if (entry.name.startsWith('_')) {
-      return;
-    }
-
     const fullPath = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
@@ -737,10 +659,12 @@ function findPageFiles(dir) {
 
 findPageFiles(PAGES_DIR);
 
-// Partition scanned pages: a config carrying a `generatorOptions` object is a
-// TEMPLATE page (expanded per item by its generator, not built literally); the rest
-// are normal pages. (Phase 2 is additive - the legacy generator dispatch above still
-// runs; Phase 3 removes it and makes template pages the sole generation path.)
+// Classify each scanned config:
+//  - `generatorOptions` present        => TEMPLATE page (expanded per item, not built
+//                                          literally); found regardless of any "_".
+//  - else a "_"-prefixed path segment  => excluded (examples/drafts/template internals;
+//                                          the "_" is an author comment, never emitted).
+//  - else                              => normal page.
 const normalPageFiles = [];
 const templatePages = [];
 for (const pageFile of pageFiles) {
@@ -752,17 +676,18 @@ for (const pageFile of pageFiles) {
     buildErrors++;
     continue;
   }
-  if (cfg && cfg.generatorOptions) templatePages.push({ file: pageFile, config: cfg });
-  else normalPageFiles.push(pageFile);
+  if (cfg && cfg.generatorOptions) {
+    templatePages.push({ file: pageFile, config: cfg });
+    continue;
+  }
+  const excluded = path.relative(PAGES_DIR, pageFile).split(path.sep).some(seg => seg.startsWith('_'));
+  if (!excluded) normalPageFiles.push(pageFile);
 }
 
-// Generated pages (from the legacy dispatch) are built alongside the scanned pages.
-const allPageFiles = [...normalPageFiles, ...generatedPageFiles];
-
-console.log(`[PAGES] Found ${normalPageFiles.length} page(s) + ${generatedPageFiles.length} generated + ${templatePages.length} template(s)\n`);
+console.log(`[PAGES] Found ${normalPageFiles.length} page(s) + ${templatePages.length} template(s)\n`);
 
 let pagesBuilt = 0;
-allPageFiles.forEach(pageFile => {
+normalPageFiles.forEach(pageFile => {
   try {
     const pageName = path.basename(pageFile, '.json');
     buildPage(pageFile, pageName);
@@ -773,7 +698,7 @@ allPageFiles.forEach(pageFile => {
   }
 });
 
-// Expand each template page into one built page per item (Phase 2 contract).
+// Expand each template page into one built page per item (data-only generator).
 templatePages.forEach(({ file, config }) => {
   try {
     pagesBuilt += expandTemplatePage(file, config);
@@ -782,11 +707,6 @@ templatePages.forEach(({ file, config }) => {
     buildErrors++;
   }
 });
-
-// Remove the scratch generated-pages dir so it is not shipped in build/.
-if (fs.existsSync(GENERATED_PAGES_DIR)) {
-  fs.rmSync(GENERATED_PAGES_DIR, { recursive: true, force: true });
-}
 
 const buildTime = ((Date.now() - buildStart) / 1000).toFixed(2);
 

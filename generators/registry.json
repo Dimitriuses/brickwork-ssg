@@ -1,4 +1,4 @@
 {
-  "products": "generate-products.build.js",
-  "custom": "generate-custom.build.js"
+  "products": "generate-detail.js",
+  "custom": "generate-detail.js"
 }

@@ -1,0 +1,10 @@
+{
+  "generatorOptions": {
+    "generator": "products",
+    "pageName": "product-{slug}",
+    "source": "products"
+  },
+  "layout": "_layout",
+  "header_theme": "dark",
+  "components": [ { "name": "contactIcons" } ]
+}

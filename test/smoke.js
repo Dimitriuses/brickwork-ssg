@@ -58,37 +58,23 @@ check('site component CSS linked', /assets\/css\/pricing\.css/.test(index));
 // Phase B: the site component declares its own sub-component (priceRow) in
 // pricing.json, resolved via the dynamic sub-component map.
 check('site sub-component renders (declared priceRow)', index.includes('class="price-row"'));
-// Phase C: a site-authored generator (example/generators/news.build.js) emits
-// pages via generate(ctx); the pricing build script used the helpers (raw) - if
-// helpers weren't passed it would have thrown and failed the build.
-check('site generator emitted pages', fs.readdirSync(buildDir).some(f => /^news-.*\.html$/.test(f)));
-
-// v0.2.1: generators resolve site-first by filename. example/generators ships its
-// own generate-custom.build.js (same name as the engine's). The site one must run
-// and the engine's must be shadowed (its "[CUSTOM-PAGES]" log must not appear).
-check('site generator shadows engine one (site ran)', fs.existsSync(path.join(buildDir, 'custom-demo.html')));
-check('site generator shadows engine one (engine skipped)',
-  buildOut.includes('[EXAMPLE-CUSTOM]') && !buildOut.includes('[CUSTOM-PAGES]'));
-// v0.2.1: product-detail.css/js resolve site-first too. example/generators ships a
-// product-detail.css whose marker must reach the built product pages' asset.
-const productDetailCss = path.join(buildDir, 'assets', 'css', 'pages', 'product-detail.css');
-check('product-detail asset resolves site-first',
-  fs.existsSync(productDetailCss) &&
-  fs.readFileSync(productDetailCss, 'utf8').includes('product-detail-site-marker'));
+// (The Phase C news generator and the v0.2.1 *.build.js auto-run / shadow fixtures
+// were removed in restructure Phase 3 - the legacy dispatch no longer exists; the
+// catalog/product-detail template pages below cover site + built-in generation.)
 
 // Generator restructure - Phase 1: resolveGenerator(name) maps a registry name to a
 // file, merging the engine + site generators/registry.json (site wins) then resolving
-// the file site-first. Not yet wired into the build pipeline.
+// the file site-first.
 const genDirs = {
   engineGeneratorsDir: path.join(root, 'generators'),
   siteGeneratorsDir: path.join(siteDir, 'generators')
 };
 check('resolver: engine-registered name -> engine file',
-  resolveGenerator('products', genDirs) === path.join(root, 'generators', 'generate-products.build.js'));
-check('resolver: file resolves site-first when the site has one',
-  resolveGenerator('custom', genDirs) === path.join(siteDir, 'generators', 'generate-custom.build.js'));
-check('resolver: site registry adds/overrides a name',
-  resolveGenerator('latest', genDirs) === path.join(siteDir, 'generators', 'news.build.js'));
+  resolveGenerator('products', genDirs) === path.join(root, 'generators', 'generate-detail.js'));
+check('resolver: built-ins share one generator (custom -> same file)',
+  resolveGenerator('custom', genDirs) === path.join(root, 'generators', 'generate-detail.js'));
+check('resolver: site registry name -> site file',
+  resolveGenerator('collection', genDirs) === path.join(siteDir, 'generators', 'generate-collection.js'));
 check('resolver: unknown name -> null', resolveGenerator('does-not-exist', genDirs) === null);
 
 // Generator restructure - Phase 2: a TEMPLATE page (carrying generatorOptions) is
@@ -106,5 +92,25 @@ const catalogCss = path.join(buildDir, 'assets', 'css', 'pages', 'catalog.css');
 check('template: template-page asset copied with marker',
   fs.existsSync(catalogCss) && fs.readFileSync(catalogCss, 'utf8').includes('catalog-marker'));
 check('template page itself not built literally', !fs.existsSync(path.join(buildDir, 'catalog.html')));
+
+// Generator restructure - Phase 3: the legacy dispatch is gone; the built-in product/
+// custom generators are data-only (one generate-detail.js, registered as products+custom)
+// and driven by template pages in example/pages.
+check('built-in "products" template built detail pages',
+  fs.existsSync(path.join(buildDir, 'product-sample-1.html')) &&
+  fs.existsSync(path.join(buildDir, 'product-sample-2.html')));
+const productHtml = fs.existsSync(path.join(buildDir, 'product-sample-1.html'))
+  ? fs.readFileSync(path.join(buildDir, 'product-sample-1.html'), 'utf8') : '';
+check('built-in generator filled the detail template (carousel + title)',
+  productHtml.includes('carousel-item') && productHtml.includes('product-detail-title'));
+check('detail template integrates contactIcons (no leftover placeholder)',
+  !productHtml.includes('{{COMPONENT:contactIcons}}'));
+// A "_"-prefixed TEMPLATE page (_custom-detail) is still discovered (the "_" is just a
+// comment); it drives the "custom" built-in over the custom collection.
+check('underscore-prefixed template still discovered',
+  fs.existsSync(path.join(buildDir, 'custom-item-a.html')));
+// A "_"-prefixed NORMAL page (_draft) is excluded from the build.
+check('underscore-prefixed normal page excluded',
+  !fs.existsSync(path.join(buildDir, 'draft.html')) && !fs.existsSync(path.join(buildDir, '_draft.html')));
 
 done();
