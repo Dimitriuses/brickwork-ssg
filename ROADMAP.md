@@ -57,14 +57,17 @@ page-driven generators.
 
 ## Planned / not yet built
 
-Order is not fixed yet; where items depend on each other it is noted inline.
+**Suggested sequence** (dependency-driven, not fixed): **1.** always-on engine self-checks →
+**2.** data management & leak prevention → **3.** `*.json` material indexing & folder trees →
+**4.** richer `generatorOptions` → **5.** material deploy commands & slim core *(needs 3)*.
+**Selectable pagination** is independent and can slot in anytime.
 
 ### Testing & robustness
 - **Always-on engine self-checks in `ssg test`** — the engine runs a baseline set of its
-  own invariants against the built site on every `ssg test`, independent of whether the
-  site defines tests, and isolated from broken site tests. A "foolproof" guarantee the
-  site is valid even when the user wrote no tests (or invalid ones). Extends today's
-  standard checks ([lib/checks.js](lib/checks.js)).
+  own site-level invariants against the built site on every `ssg test`, **on by default but
+  disableable per-site**, independent of whether the site defines tests, and isolated from
+  broken site tests. A "foolproof" guarantee the site is valid even when the user wrote no
+  tests (or invalid ones). Extends today's standard checks ([lib/checks.js](lib/checks.js)).
 
 ### Data & generators
 - **Data management & leak prevention** — separate *data* from *web assets*, read item
@@ -77,25 +80,38 @@ Order is not fixed yet; where items depend on each other it is noted inline.
   and moves more logic out of generator JS into the template config.
 
 ### Indexing & build materials
-- **`*.json` material indexing** — move from scanning file lists to **registering** build
-  materials (components, generators, tests) via `*.json`, for explicit, faster indexing.
-  Generalizes/replaces the earlier "`registry.json` restructuring" (kept deliberately small
-  so this is cheap). Trade-off to settle: explicit registration vs today's zero-config
-  "drop a file and it's found".
+- **`*.json` material indexing & folder trees** — move from scanning file lists to
+  **registering** materials (components, generators, tests) via `*.json`, which also enables
+  **nested folder trees**: a sub-component lives in its own folder inside its parent (e.g.
+  `faq/faq_item`, `products/product_item`) and is *declared* rather than discovered. Because
+  it's a real registered material, the **engine bundles its `style.css`/`script.js`** — no
+  custom build script needed just to assemble or bundle sub-parts. Generalizes today's
+  declarative sub-components + `components/registry.json` folder mapping. Trade-off to
+  settle: explicit registration vs today's zero-config "drop a file and it's found".
 
 ### Tooling & distribution
-- **Material *deploy* commands** — e.g. `ssg add component <name>` (and generators/tests)
-  to scaffold a material into a site from the engine, replacing hand-copied overrides.
-  Builds on the material index above (deploy *by name*). Note: a deployed copy still
-  diverges from the engine afterward — this makes *adding* ergonomic, it doesn't remove the
-  override/sync trade-off.
-- **npm-distributed third-party plugins/themes + a plugin registry** — third-party
-  distribution, once the in-repo model is proven.
+- **Material *deploy* commands & a slim core** — `ssg add component <name>` (and
+  generators/tests) scaffolds a material into a site from a catalog, **and the engine stops
+  shipping example/default materials that every site silently inherits**. This fixes three
+  pains: example generators producing pages nobody asked for (no empty-override needed);
+  having to dig out and hand-copy a material to edit it; and an engine update to a shared
+  material breaking sites. A deployed copy is **owned by the site** (no auto-update — by
+  design; this is what removes the override/sync problem). The catalog could live in the
+  engine (not auto-built) or in a separate "materials" project (see plugins, below). Builds
+  on the material index above (deploy *by name*).
+- **npm-distributed third-party plugins/themes + a material registry** — third-party/shared
+  distribution (e.g. a community "materials" project people add to), once the deploy model
+  is proven.
 
 ### Pages & assets
 - **Selectable pagination modes** — let the site choose **single-page** (client-side, all
   cards rendered; today's behavior) or **multi-page** (build-time HTML splitting across
-  several pages, so the HTML stops scaling linearly with item count). Multi-page overlaps
-  the generator/template-page model — likely best built on top of it rather than as a
-  separate path.
+  several pages, so the HTML stops scaling linearly with item count). These are really *two
+  implementations behind one flag*: single-page is inherently client-side (`script.js`),
+  multi-page is build-time and should reuse the generator/template-page machinery (a page =
+  a *window* of the list, not one item — which stretches today's one-item-one-page contract).
+  Expect this to be fiddly.
+- **Thin build/generator scripts** — move presentation markup (e.g. the carousel-controls
+  HTML now built inside `generate-detail.js` / `products.build.js`) out of the scripts into
+  templates or `script.js`, keeping build logic and markup separate.
 - **Multiple `style.css` / `script.js` files per page folder.**
