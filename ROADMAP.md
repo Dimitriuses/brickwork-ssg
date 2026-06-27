@@ -60,7 +60,8 @@ page-driven generators.
 **Suggested sequence** (dependency-driven, not fixed): **1.** always-on engine self-checks →
 **2.** data management & leak prevention → **3.** `*.json` material indexing & folder trees →
 **4.** richer `generatorOptions` → **5.** material deploy commands & slim core *(needs 3)*.
-**Selectable pagination** is independent and can slot in anytime.
+**Multi-page pagination** is **deferred** — it needs a window-based generation model
+(below) and is a large task in its own right.
 
 ### Testing & robustness
 - **Always-on engine self-checks in `ssg test`** — the engine runs a baseline set of its
@@ -68,6 +69,9 @@ page-driven generators.
   disableable per-site**, independent of whether the site defines tests, and isolated from
   broken site tests. A "foolproof" guarantee the site is valid even when the user wrote no
   tests (or invalid ones). Extends today's standard checks ([lib/checks.js](lib/checks.js)).
+  Configured in `config.json`, e.g. `"test": { "engineChecks": false }` (default on). Keep
+  the always-on set to content-agnostic invariants (broken links, unresolved placeholders,
+  leftover `{{COMPONENT}}`) so it rarely false-positives; site-specific asserts stay in user tests.
 
 ### Data & generators
 - **Data management & leak prevention** — separate *data* from *web assets*, read item
@@ -78,6 +82,10 @@ page-driven generators.
   `generator`/`pageName`/`source`: filters, sort, pagination, and a declarative mapping of
   source data fields → template placeholders. Subsumes "config-supplied title/description"
   and moves more logic out of generator JS into the template config.
+- **Window-based (list) generation** *(deferred, large)* — emit a page per *window/slice*
+  of a collection (e.g. `shop-2`, `shop-3`), generalizing today's one-item→one-page
+  contract. A significant task on its own; the prerequisite for multi-page pagination.
+  Postponed until feasible.
 
 ### Indexing & build materials
 - **`*.json` material indexing & folder trees** — move from scanning file lists to
@@ -99,19 +107,19 @@ page-driven generators.
   design; this is what removes the override/sync problem). The catalog could live in the
   engine (not auto-built) or in a separate "materials" project (see plugins, below). Builds
   on the material index above (deploy *by name*).
+- **`ssg init`** — scaffold a starting project (deploy a baseline set of materials + a
+  minimal `config.json`/`pages/`), so a fresh project isn't empty once the core is slim.
 - **npm-distributed third-party plugins/themes + a material registry** — third-party/shared
   distribution (e.g. a community "materials" project people add to), once the deploy model
   is proven.
 
 ### Pages & assets
-- **Selectable pagination modes** — let the site choose **single-page** (client-side, all
-  cards rendered; today's behavior) or **multi-page** (build-time HTML splitting across
-  several pages, so the HTML stops scaling linearly with item count). These are really *two
-  implementations behind one flag*: single-page is inherently client-side (`script.js`),
-  multi-page is build-time and should reuse the generator/template-page machinery (a page =
-  a *window* of the list, not one item — which stretches today's one-item-one-page contract).
-  Expect this to be fiddly.
-- **Thin build/generator scripts** — move presentation markup (e.g. the carousel-controls
-  HTML now built inside `generate-detail.js` / `products.build.js`) out of the scripts into
-  templates or `script.js`, keeping build logic and markup separate.
+- **Selectable pagination modes** — **single-page** (client-side, all cards rendered;
+  today's behavior) is available now. **Multi-page** (build-time HTML splitting, so the HTML
+  stops scaling linearly with item count) is **deferred**: it needs the *window-based
+  generation* model above. The two modes are different mechanisms — single-page is pure
+  `script.js`, multi-page is build-time — so this is "two implementations behind one flag".
+- **Thin build/generator scripts** — move presentation markup out of the scripts. E.g. the
+  carousel-controls HTML now built inside `generate-detail.js` / `products.build.js` moves
+  to **client-side `script.js`**, keeping build logic and markup separate.
 - **Multiple `style.css` / `script.js` files per page folder.**
