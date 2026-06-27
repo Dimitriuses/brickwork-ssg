@@ -57,25 +57,45 @@ page-driven generators.
 
 ## Planned / not yet built
 
-### Generators & data
-- **Database / collection processing** — separate *data* from *web assets*, read data
-  **pre-copy**, and add a **controlled `product.json` copy** so raw item data isn't shipped
-  into `build/` by default (leak control). `shared/database.json` and `copyCollections`
-  are untouched for now.
-- **`registry.json` restructuring** — an evolved/unified registry shape (the current
-  generator registry is deliberately kept small so this is cheap to change).
-- **Richer `generatorOptions`** — beyond `generator`/`pageName`/`source`: filters, sort,
-  pagination.
-- **`title`/`description` (and other page fields) as template-config values**, instead of
-  being supplied only by the generator.
+Order is not fixed yet; where items depend on each other it is noted inline.
+
+### Testing & robustness
+- **Always-on engine self-checks in `ssg test`** — the engine runs a baseline set of its
+  own invariants against the built site on every `ssg test`, independent of whether the
+  site defines tests, and isolated from broken site tests. A "foolproof" guarantee the
+  site is valid even when the user wrote no tests (or invalid ones). Extends today's
+  standard checks ([lib/checks.js](lib/checks.js)).
+
+### Data & generators
+- **Data management & leak prevention** — separate *data* from *web assets*, read item
+  data **pre-copy**, and add a **controlled `product.json` copy** so raw data isn't shipped
+  into `build/` by default. (Today `shared/database.json` + `copyCollections` copy the whole
+  folder.)
+- **Richer `generatorOptions`, incl. placeholder-data mapping** — beyond
+  `generator`/`pageName`/`source`: filters, sort, pagination, and a declarative mapping of
+  source data fields → template placeholders. Subsumes "config-supplied title/description"
+  and moves more logic out of generator JS into the template config.
+
+### Indexing & build materials
+- **`*.json` material indexing** — move from scanning file lists to **registering** build
+  materials (components, generators, tests) via `*.json`, for explicit, faster indexing.
+  Generalizes/replaces the earlier "`registry.json` restructuring" (kept deliberately small
+  so this is cheap). Trade-off to settle: explicit registration vs today's zero-config
+  "drop a file and it's found".
+
+### Tooling & distribution
+- **Material *deploy* commands** — e.g. `ssg add component <name>` (and generators/tests)
+  to scaffold a material into a site from the engine, replacing hand-copied overrides.
+  Builds on the material index above (deploy *by name*). Note: a deployed copy still
+  diverges from the engine afterward — this makes *adding* ergonomic, it doesn't remove the
+  override/sync trade-off.
+- **npm-distributed third-party plugins/themes + a plugin registry** — third-party
+  distribution, once the in-repo model is proven.
 
 ### Pages & assets
-- **Per-page HTML splitting** — build-time pagination across multiple HTML pages for very
-  large collections (today pagination is client-side and the page HTML scales linearly
-  with item count).
+- **Selectable pagination modes** — let the site choose **single-page** (client-side, all
+  cards rendered; today's behavior) or **multi-page** (build-time HTML splitting across
+  several pages, so the HTML stops scaling linearly with item count). Multi-page overlaps
+  the generator/template-page model — likely best built on top of it rather than as a
+  separate path.
 - **Multiple `style.css` / `script.js` files per page folder.**
-
-### Distribution & ecosystem
-- **npm-distributed third-party plugins/themes + a plugin registry.** Today a site can
-  author its own components and generators in-repo; third-party distribution is a later
-  milestone once the in-repo model is proven.
