@@ -40,9 +40,11 @@ escape hatch.
 **Goal:** close the leak end-to-end and hand generators structured items.
 
 **Design**
-- Flip the per-part `copy` default to **`false`** — "safe by default": a part ships only if
-  marked `copy: true`. So a real model becomes
-  `images: { match: "...", copy: true }`, `data: { match: "product.json" }` (not copied).
+- Make **`copy` explicit**: `copy: true` ships the part, `copy: false` keeps it out — and
+  **omitting `copy` warns** and treats the part as *not copied* ("part X has no `copy`; its
+  files will NOT be copied — set `copy: true` to ship or `copy: false` to silence"). So a real
+  model is `images: { match: "...", copy: true }`, `data: { match: "product.json", copy: false }`
+  — both explicit, no warnings.
 - The engine resolves each item via the model: parse the **`data`** part (JSON for now) into
   `data`; resolve the **`images`** matches to web paths under `destination`. It hands the
   generator `ctx.collection.items = [{ slug, data, images: [webPaths] }]`.
@@ -51,10 +53,11 @@ escape hatch.
   maps items → descriptors.
 
 **Caveats**
-- **Default-flip is a small breaking change**, but scoped: it only affects *parts inside a
-  `data_model` that omit `copy`*. A collection with **no** `data_model` still copies the whole
-  folder (back-compat) — so model-less sites are untouched. Sites that adopt a model must mark
-  their asset parts `copy: true`. Document this in the data_model migration note.
+- **Breaking for model-using collections that omit `copy`** (Task 2 defaulted it to `true`;
+  Track A makes omission mean "not copied, with a warning"). A collection with **no**
+  `data_model` still copies the whole folder (back-compat) — model-less sites are untouched.
+  Sites with a model must mark each part's `copy` explicitly. Note this in the data_model
+  migration.
 - **`data` parsing** assumes JSON (`product.json`). Generalizing (other formats / typed data)
   is Track B / later — keep it JSON here.
 - It **re-touches the generator contract** (`ctx.collection` gains `items`). One more small
@@ -62,30 +65,38 @@ escape hatch.
 
 ---
 
-## Track B — Declarative data → placeholder mapping
+## Track B — Declarative data → placeholder mapping (`generatorOptions.map`)
 
-**Goal:** fill a template's `{{PLACEHOLDERS}}` from item data declaratively, so the standard
-generator shrinks toward nothing.
+**Goal:** fill a template's `{{PLACEHOLDERS}}` from item data declaratively, so a **standard
+detail page needs no custom generator** — just `data_model` + template + `map` + components.
+Custom generators stay as the escape hatch (e.g. pulling the collection as an array of objects
+and reshaping it freely).
 
 **Design**
-- `generatorOptions` gains a map, e.g. `"map": { "PRODUCT_NAME": "data.name", "PRODUCT_PRICE":
-  "data.price" }` — left = template placeholder, right = a **dot-path** into the item
-  (`data.*`, `images.*`).
-- The engine fills the template per item from the map + `ctx.collection.items[i]`. The
-  generator supplies only what the map can't.
+- `generatorOptions.map` maps placeholders to dot-paths into the item, e.g.
+  `"map": { "PRODUCT_NAME": "data.name", "PRODUCT_PRICE": "data.price" }` (`data.*`, `images.*`).
+  The engine fills the template per item from the map + `ctx.collection.items[i]`.
+- **`generatorOptions.generator` becomes optional.** Absent ⇒ the engine's built-in behavior
+  (one page per collection item, template filled via `map`). Present ⇒ the named generator runs
+  (custom; it receives `ctx.collection.items` and may restructure however it likes). So
+  "generator-free" is just "no generator named", not a new concept.
+- **Validation relaxes**: `generator` is no longer required; if absent, `source` (a collection)
+  + `map`/template are what's needed; if present it must still resolve.
 
-**The hard part (caveat).** Flat fields map cleanly; **computed** vars do not — the carousel
-HTML built from `images` isn't a field lookup. **Do not build an expression language.** Two
-ways out:
-- **(a) Pragmatic:** map flat fields; the generator returns the computed vars (carousel) which
-  merge in. Generators shrink but don't vanish.
-- **(b) Elegant:** make the computed bits **components** — a `carousel` sub-component that takes
-  `images` and renders itself. Then map + components cover everything and **the standard
-  detail page needs no custom generator at all** (just `data_model` + template + `map` +
-  a carousel component). This depends on Track C (folder-trees).
+**The carousel — the elegant goal (and the real challenge).** Computed output (the image
+carousel) is not a field lookup, and we won't build an expression language. Instead the carousel
+becomes a **`carousel` component** that takes `images` and renders itself — so map + components
+cover everything and the standard product detail page is **pure config**. The catch to design:
+a generated page's components need **per-item** data (this item's `images`), but components today
+take static vars from the page config. So Track B/C must let the **map feed per-item fields into
+a page's component vars** (an "item scope"), e.g.
+`components: [{ name: "carousel", vars: { IMAGES: "images" } }]`. That plumbing — per-item data
+reaching per-page components — is the crux of the elegant solution; settle its shape before
+building the carousel.
 
-**Recommendation:** start with **(a)**, aim at **(b)** as Track C lands. Keep this to *flat
-mapping* — the rich typing/transforms (the old "Task 4") stay out for now.
+**Recommendation:** land flat `map` first (it pairs with Track A); then the carousel component +
+per-item component vars (needs Track C). Keep this to mapping + components — rich typing /
+transforms stay out.
 
 ---
 
@@ -103,18 +114,18 @@ explicit indexing — without losing zero-config.
     component's. (Today sub-components don't get their own bundled assets — this is the main
     new behavior.) This is what lets a `carousel`/`product_item` exist without a custom
     build script just to assemble + bundle it.
-- **Optional per-folder manifest** (your point 4): a folder may list its files explicitly
-  (`html`/`css`/`js`/`build.js`). It buys **non-convention filenames** and **multiple
-  css/js per folder** (itself a deferred roadmap item). Absence = today's scan-by-convention.
-- **Hybrid (your point 7):** scan by convention by **default**; registry + manifest are purely
+- **Per-folder manifest** (your point 4) — **deferred** to a later pass. v1 is just
+  *sub-components in folders + bundled assets*; the manifest (non-convention names, multiple
+  css/js per folder) comes later.
+- **Hybrid (your point 7):** scan by convention by **default**; the registry is purely
   **additive**. The engine runs with **no** registration (today's behavior) — registration is
   opt-in capability, not a regime change.
 
 **Caveats**
 - A lot of this is *extension*, not new — keep it from re-inventing the existing
   subComponent/registry machinery.
-- The manifest adds a config surface; keep it optional and minimal. It only earns its keep if
-  you actually want multi-asset folders / non-convention names — decide that explicitly.
+- The main new behavior is **bundling a sub-component's `style.css`/`script.js`** (today they
+  don't get their own assets); wire registered sub-components into asset collection.
 
 ---
 
@@ -157,19 +168,29 @@ The safe answer to the fork you raised:
 Each track is sequenced so the next can rely on it (B's "elegant" path needs C; the
 carousel-as-component end state is A+B+C together).
 
-## Notes / caveats / open questions
+## Decisions (resolved) & remaining caveats
 
-- **Track A default-flip:** confirm "safe by default" — `copy` default `false` means every
-  web-asset part needs an explicit `copy: true`. Good trade (leak-safe) but more verbose. OK?
-- **Track B scope:** OK to start with **flat-field mapping** + generators for computed (no
-  expression language)? And the end-goal of **no custom generator** for standard detail pages?
-- **Track C manifest:** is the optional file manifest worth the surface now, or is
-  "sub-components in folders + bundled assets" enough for v1 (manifest later, with multi-asset)?
-- **Track D:** agree to split routing into its own later task and keep `generatorOptions` in the
-  page config?
-- **Naming:** the data→placeholder map — `generatorOptions.map`? `fields`? `bind`? And the
-  registry for trees — extend `components/registry.json`, or a new `components.json`?
-- **One nice consequence to aim for:** A + B + C together mean the standard product/custom
-  detail page is *pure config* — `data_model` + a template page + a `map` + a `carousel`
-  component — with **no site-authored generator**. Custom generators (and `*.build.js`) remain
-  the escape hatch for the non-standard 5%.
+**Resolved**
+- `copy` is **explicit**: `true` ships, `false` keeps out; **omitting it warns** and treats the
+  part as not-copied (explicit `false` is silent).
+- Scope = **no custom generator for standard detail pages**; generators stay as a customization
+  tool (incl. reshaping the collection into arbitrary arrays of objects).
+- Names: keep **`components/registry.json`**; mapping is **`generatorOptions.map`**.
+- **Manifests deferred**; v1 = sub-components in folders + bundled assets.
+- **Routing is a separate, later task**; `generatorOptions` stays in the page config for now.
+- **Carousel → a real component**, aiming at generator-free product-detail rendering.
+
+**Remaining caveats / watch-items**
+- Make the omitted-`copy` warning **actionable** ("part X has no `copy` — its files will NOT
+  ship; set `copy: true`/`false`"). It's easy to lose images by forgetting `copy: true`.
+- The hard plumbing is **per-item data → per-page components** (carousel images). Settle that
+  shape (the `map` targeting component vars / an item scope) before building the carousel.
+- `ctx.collection.items` is the shared substrate for **both** the generator-free path and custom
+  generators — get its shape (`{ slug, data, images }`) right once.
+- `generator`-optional relaxes the Phase-4 validation; keep the loud errors for what remains
+  (unknown generator, missing source/collection, name collisions, and now **bad `map` paths**).
+
+**The target end state:** a standard product/custom detail page is *pure config* —
+`data_model` + a template page + a `map` + a `carousel` component — with **no site-authored
+generator**. Custom generators (and `*.build.js`) remain the escape hatch for the non-standard
+cases.
