@@ -65,10 +65,16 @@ formerly step 1 — is **done**; see Implemented.) **Multi-page pagination** is 
 it needs a window-based generation model (below) and is a large task in its own right.
 
 ### Data & generators
-- **Data management & leak prevention** — separate *data* from *web assets*, read item
-  data **pre-copy**, and add a **controlled `product.json` copy** so raw data isn't shipped
-  into `build/` by default. (Today `shared/database.json` + `copyCollections` copy the whole
-  folder.)
+- **Data management & leak prevention** — a per-collection **`data_model`** declares each
+  item's parts (an object keyed by name, e.g. `images`, `data`), each with **`match`** (a
+  glob), **`copy`** (does it reach `build/`), and **`required`** (build error if absent).
+  Leak control: mark the `data` part `copy: false` so raw `product.json` never ships to
+  `build/`. A **missing `data_model` ⇒ today's behavior** (copy the whole folder) **+ a
+  gentle warning** (opt-in). **Build-time validation** with clear messages — bad glob,
+  required-but-missing (and unknown `type` once typing lands). The engine **reading** items
+  and handing generators `ctx.collection.items = [{ data, images }]` belongs to the next
+  item (*material indexing*); typed `data` + field→placeholder mapping is **richer
+  `generatorOptions`** (Task 4 below).
 - **Richer `generatorOptions`, incl. placeholder-data mapping** — beyond
   `generator`/`pageName`/`source`: filters, sort, pagination, and a declarative mapping of
   source data fields → template placeholders. Subsumes "config-supplied title/description"
