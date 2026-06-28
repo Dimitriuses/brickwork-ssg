@@ -189,6 +189,16 @@ carousel-as-component end state is A+B+C together).
   generators — get its shape (`{ slug, data, images }`) right once.
 - `generator`-optional relaxes the Phase-4 validation; keep the loud errors for what remains
   (unknown generator, missing source/collection, name collisions, and now **bad `map` paths**).
+- **Path vs. literal** in `map` (and per-item component vars): the engine must tell a data-path
+  (`data.name`) from a literal string. Pick a rule — *values are always paths in `map` context*,
+  or *mark a path with a sigil* (`"$images"`) — before wiring the carousel's per-item vars.
+- **Coordinate the default-flip:** the commit that flips `copy` must also set explicit `copy` on
+  the engine `example/` + the `data_model` fixtures (they currently omit it from Task 2), or
+  they'll warn-flood and drop their files.
+- **Expect a small follow-on site migration:** once the generator-free path + carousel component
+  land, the private/demo product-detail pages move from "template + `products` generator" to
+  "template + `map` + carousel component" — and we decide whether `generate-detail.js` stays as
+  a bundled *example* of a custom generator or retires.
 
 **The target end state:** a standard product/custom detail page is *pure config* —
 `data_model` + a template page + a `map` + a `carousel` component — with **no site-authored
