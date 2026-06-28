@@ -70,7 +70,9 @@ it needs a window-based generation model (below) and is a large task in its own 
   glob), **`copy`** (does it reach `build/`), and **`required`** (build error if absent).
   Leak control: mark the `data` part `copy: false` so raw `product.json` never ships to
   `build/`. A **missing `data_model` ⇒ today's behavior** (copy the whole folder) **+ a
-  gentle warning** (opt-in). **Build-time validation** with clear messages — bad glob,
+  gentle warning** (opt-in). Per-part `copy` defaults **`true`** in this task — it is the
+  *mechanism* only; the default flips to **`false`** in *material indexing* (next item),
+  where generators gain a source-read so `copy: false` is actually safe to use. **Build-time validation** with clear messages — bad glob,
   required-but-missing (and unknown `type` once typing lands). The engine **reading** items
   and handing generators `ctx.collection.items = [{ data, images }]` belongs to the next
   item (*material indexing*); typed `data` + field→placeholder mapping is **richer
@@ -93,6 +95,9 @@ it needs a window-based generation model (below) and is a large task in its own 
   custom build script needed just to assemble or bundle sub-parts. Generalizes today's
   declarative sub-components + `components/registry.json` folder mapping. Trade-off to
   settle: explicit registration vs today's zero-config "drop a file and it's found".
+  Also completes the data side of leak prevention: flips the collection `copy` default to
+  **`false`**, reads each item into `ctx.collection.items = [{ data, images }]`, and updates
+  generators to populate from source — so `product.json` stops shipping to `build/`.
 
 ### Tooling & distribution
 - **Material *deploy* commands & a slim core** — `ssg add component <name>` (and
