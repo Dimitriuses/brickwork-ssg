@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { standardChecks } = require('../lib/checks');
 const { resolveGenerator } = require('../lib/generators');
+const { globToRegExp } = require('../lib/glob');
 
 const root = path.join(__dirname, '..');
 const siteDir = path.join(root, 'example');
@@ -156,5 +157,31 @@ try {
 }
 check('config test.engineChecks=false skips engine checks', /Engine checks: skipped/.test(offOut));
 check('disabling engine checks still exits 0 on a valid site', offExit === 0);
+
+// Data management - leak control (Task 2 commit 1): a collection's data_model controls
+// which item files reach build/. `copy` defaults true; a `copy:false` part is skipped.
+check('glob: *.png matches png not jpg',
+  globToRegExp('*.png').test('a.png') && !globToRegExp('*.png').test('a.jpg'));
+check('glob: brace alternation, case-insensitive',
+  globToRegExp('*.{jpg,png}').test('x.JPG') && globToRegExp('*.{jpg,png}').test('x.png'));
+check('glob: literal filename (dot is literal)',
+  globToRegExp('product.json').test('product.json') && !globToRegExp('product.json').test('product_json'));
+
+let dmOut = '';
+try {
+  dmOut = execSync('node cli.js build --site test/fixtures/data-model', { cwd: root, stdio: 'pipe' }).toString();
+} catch (e) {
+  dmOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
+}
+const dmBuild = path.join(root, 'test', 'fixtures', 'data-model', 'build');
+check('data_model: image part (default copy) reaches build',
+  fs.existsSync(path.join(dmBuild, 'stuff', 'item-1', 'pic.png')));
+check('data_model: undeclared file is still copied (permissive)',
+  fs.existsSync(path.join(dmBuild, 'stuff', 'item-1', 'notes.txt')));
+check('data_model: copy:false part is NOT copied (leak control)',
+  !fs.existsSync(path.join(dmBuild, 'stuff', 'item-1', 'info.json')));
+check('data_model: collection without a model still copies whole folder',
+  fs.existsSync(path.join(dmBuild, 'legacy', 'item-1', 'a.txt')));
+check('data_model: a model-less collection warns', /no data_model/.test(dmOut));
 
 done();

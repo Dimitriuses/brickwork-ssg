@@ -1,4 +1,14 @@
 { "collections": [
-  { "name": "products", "source": "shared/products", "destination": "products", "enabled": true },
-  { "name": "custom", "source": "shared/custom", "destination": "custom", "enabled": true }
+  { "name": "products", "source": "shared/products", "destination": "products", "enabled": true,
+    "data_model": {
+      "images": { "match": "*.{jpg,jpeg,png,gif,webp}" },
+      "data":   { "match": "product.json" }
+    }
+  },
+  { "name": "custom", "source": "shared/custom", "destination": "custom", "enabled": true,
+    "data_model": {
+      "images": { "match": "*.{jpg,jpeg,png,gif,webp}" },
+      "data":   { "match": "product.json" }
+    }
+  }
 ] }

@@ -3,6 +3,7 @@ const path = require('path');
 const { RawHtml, raw, escapeHtml } = require('./lib/html');
 const { slugify } = require('./lib/slugify');
 const { resolveGenerator } = require('./lib/generators');
+const { globToRegExp } = require('./lib/glob');
 
 // Path roots. The engine (this script, components, lib, layout) is shared by
 // every site; the site being built is the current working directory. Splitting
@@ -563,6 +564,48 @@ function copyComponentAssets(kind) {
 const copyComponentCSS = () => copyComponentAssets('css');
 const copyComponentJS = () => copyComponentAssets('js');
 
+// Copy a collection whose items declare a `data_model`: copy every file of each item
+// EXCEPT those matching a part marked `copy: false`. `copy` defaults true (this is the
+// leak-control *mechanism*; the default flips to false in a later task). Match globs are
+// item-relative. Items are the immediate subfolders of the source; top-level files copy
+// as-is. `required` is enforced separately by the build-time validation.
+function copyCollectionByModel(collection, sourcePath, destPath) {
+  const skipMatchers = Object.values(collection.data_model || {})
+    .filter(part => part && part.copy === false && part.match)
+    .map(part => globToRegExp(part.match));
+  const skip = (relPath) => skipMatchers.some(re => re.test(relPath));
+
+  let itemCount = 0;
+  fs.readdirSync(sourcePath, { withFileTypes: true }).forEach(entry => {
+    const src = path.join(sourcePath, entry.name);
+    const dest = path.join(destPath, entry.name);
+    if (entry.isDirectory()) {
+      itemCount++;
+      copyItemFiltered(src, dest, skip);
+    } else if (!skip(entry.name)) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(src, dest);
+    }
+  });
+  console.log(`  [MODEL]  ${collection.name}: ${collection.source} → ${collection.destination} (${itemCount} item(s))`);
+}
+
+// Recursively copy an item folder, skipping files whose item-relative path matches a
+// `copy: false` part.
+function copyItemFiltered(itemSrc, itemDest, skip, rel = '') {
+  fs.readdirSync(itemSrc, { withFileTypes: true }).forEach(entry => {
+    const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+    const src = path.join(itemSrc, entry.name);
+    const dest = path.join(itemDest, entry.name);
+    if (entry.isDirectory()) {
+      copyItemFiltered(src, dest, skip, relPath);
+    } else if (!skip(relPath)) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(src, dest);
+    }
+  });
+}
+
 // Function to copy collections (products, custom items, etc.) based on database.json
 function copyCollections() {
   if (!database.collections || database.collections.length === 0) {
@@ -583,12 +626,21 @@ function copyCollections() {
     const sourcePath = path.join(SITE_ROOT, collection.source);
     const destPath = path.join(BUILD_DIR, collection.destination);
 
-    if (fs.existsSync(sourcePath)) {
+    if (!fs.existsSync(sourcePath)) {
+      console.log(`  [ERROR] ${collection.name}: Source not found (${collection.source})`);
+      return;
+    }
+
+    if (!collection.data_model) {
+      // Back-compat: copy the whole collection, but nudge toward declaring a data_model
+      // so the engine knows which parts are web assets vs data (leak control).
       copyDirectory(sourcePath, destPath);
       console.log(`  [FOLDER] ${collection.name}: ${collection.source} → ${collection.destination}`);
-    } else {
-      console.log(`  [ERROR] ${collection.name}: Source not found (${collection.source})`);
+      console.log(`  [WARNING] ${collection.name}: no data_model - copying the whole collection; declare one to control which parts ship to build/`);
+      return;
     }
+
+    copyCollectionByModel(collection, sourcePath, destPath);
   });
   
   console.log('');
