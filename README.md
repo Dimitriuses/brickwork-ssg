@@ -32,7 +32,7 @@ git submodule update --init --recursive
 node engine/cli.js build                 # build the site (cwd) into build/
 node engine/cli.js build --site path     # or build any site directory
 node engine/cli.js admin                 # product admin on http://localhost:3000
-node engine/cli.js test                  # build + standard checks + site tests
+node engine/cli.js test                  # build + engine checks + site tests
 ```
 
 Add scripts to your site's `package.json`:
@@ -90,8 +90,11 @@ A site can add its own components, generators, and tests — no engine fork need
   assembles a page each. Add `generators/<name>.js` exporting
   `{ generate(ctx, options) }` (returns `[{ slug, title, description, vars }]`) and map
   it in `generators/registry.json`. See [docs/generator-migration.md](docs/generator-migration.md).
-- **Tests** — add `test/<name>.test.js` (`module.exports = (ctx) => { ctx.check(...) }`);
-  `ssg test` builds the site, runs reusable standard checks, then your tests.
+- **Tests** — add `test/<name>.test.js` (`module.exports = (ctx) => { ctx.check(...) }`).
+  `ssg test` builds the site, runs the engine's **always-on checks** (content-agnostic
+  invariants — broken links, unresolved placeholders, leftover `{{COMPONENT}}` — isolated
+  from your tests so the site is validated even with no/broken tests), then your tests.
+  Opt out per-site with `config.json` `"test": { "engineChecks": false }`.
 
 See [docs/extensibility.md](docs/extensibility.md) for the full design.
 

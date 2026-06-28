@@ -135,4 +135,26 @@ check('validation: source collection not found', /source collection "nope" not f
 check('validation: source collection disabled', /source collection "off" is disabled/.test(invalidOut));
 check('validation: page-name collision', /page name collision: "dup\.html"/.test(invalidOut));
 
+// Always-on engine self-checks: `ssg test` runs the engine's checks by default,
+// labeled "Engine checks", and a site can opt out via config test.engineChecks=false.
+let exTestOut = '';
+try {
+  exTestOut = execSync('node cli.js test --site example', { cwd: root, stdio: 'pipe' }).toString();
+} catch (e) {
+  exTestOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
+}
+check('ssg test runs engine checks by default',
+  /Engine checks:/.test(exTestOut) && !/Engine checks: skipped/.test(exTestOut));
+
+let offExit = 0;
+let offOut = '';
+try {
+  offOut = execSync('node cli.js test --site test/fixtures/checks-off', { cwd: root, stdio: 'pipe' }).toString();
+} catch (e) {
+  offExit = e.status || 1;
+  offOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
+}
+check('config test.engineChecks=false skips engine checks', /Engine checks: skipped/.test(offOut));
+check('disabling engine checks still exits 0 on a valid site', offExit === 0);
+
 done();

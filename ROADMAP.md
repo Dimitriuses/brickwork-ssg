@@ -49,29 +49,20 @@ page-driven generators.
 - **Lazy image loading** (`loading="lazy" decoding="async"`) on product/detail images.
 
 ### Tooling & distribution
-- `ssg test`: reusable standard checks ([lib/checks.js](lib/checks.js)) plus a site's
-  own `test/*.test.js`.
+- `ssg test`: the engine's **always-on checks** ([lib/checks.js](lib/checks.js)) — content-
+  agnostic invariants run on every test, isolated from site tests, opt-out via `config.json`
+  `"test": { "engineChecks": false }` — plus a site's own `test/*.test.js`.
 - **Admin server** (Express + Multer) for product/image CRUD (`ssg admin`).
 - Consumed by sites as a **git submodule**; GitHub Pages deploy (`submodules: recursive`);
   LF normalization via `.gitattributes`.
 
 ## Planned / not yet built
 
-**Suggested sequence** (dependency-driven, not fixed): **1.** always-on engine self-checks →
-**2.** data management & leak prevention → **3.** `*.json` material indexing & folder trees →
-**4.** richer `generatorOptions` → **5.** material deploy commands & slim core *(needs 3)*.
-**Multi-page pagination** is **deferred** — it needs a window-based generation model
-(below) and is a large task in its own right.
-
-### Testing & robustness
-- **Always-on engine self-checks in `ssg test`** — the engine runs a baseline set of its
-  own site-level invariants against the built site on every `ssg test`, **on by default but
-  disableable per-site**, independent of whether the site defines tests, and isolated from
-  broken site tests. A "foolproof" guarantee the site is valid even when the user wrote no
-  tests (or invalid ones). Extends today's standard checks ([lib/checks.js](lib/checks.js)).
-  Configured in `config.json`, e.g. `"test": { "engineChecks": false }` (default on). Keep
-  the always-on set to content-agnostic invariants (broken links, unresolved placeholders,
-  leftover `{{COMPONENT}}`) so it rarely false-positives; site-specific asserts stay in user tests.
+**Suggested sequence** (dependency-driven, not fixed): **1.** data management & leak prevention →
+**2.** `*.json` material indexing & folder trees → **3.** richer `generatorOptions` →
+**4.** material deploy commands & slim core *(needs 2)*. (Always-on engine self-checks —
+formerly step 1 — is **done**; see Implemented.) **Multi-page pagination** is **deferred** —
+it needs a window-based generation model (below) and is a large task in its own right.
 
 ### Data & generators
 - **Data management & leak prevention** — separate *data* from *web assets*, read item
