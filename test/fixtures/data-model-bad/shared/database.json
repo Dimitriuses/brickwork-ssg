@@ -1,0 +1,8 @@
+{ "collections": [
+  { "name": "req",     "source": "shared/req",     "destination": "req",     "enabled": true,
+    "data_model": { "data": { "match": "data.json", "required": true } } },
+  { "name": "badglob", "source": "shared/badglob", "destination": "badglob", "enabled": true,
+    "data_model": { "a": { "match": "*.{jpg" } } },
+  { "name": "badcopy", "source": "shared/badcopy", "destination": "badcopy", "enabled": true,
+    "data_model": { "a": { "match": "*.txt", "copy": "yes" } } }
+] }

@@ -184,4 +184,19 @@ check('data_model: collection without a model still copies whole folder',
   fs.existsSync(path.join(dmBuild, 'legacy', 'item-1', 'a.txt')));
 check('data_model: a model-less collection warns', /no data_model/.test(dmOut));
 
+// Data management - validation (Task 2 commit 2): a malformed data_model or a missing
+// `required` part fails the build with a clear message.
+let dmBadExit = 0;
+let dmBadOut = '';
+try {
+  dmBadOut = execSync('node cli.js build --site test/fixtures/data-model-bad', { cwd: root, stdio: 'pipe' }).toString();
+} catch (e) {
+  dmBadExit = e.status || 1;
+  dmBadOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
+}
+check('data_model validation: invalid model fails the build', dmBadExit !== 0);
+check('data_model validation: required-but-missing', /required "data" \(match data\.json\) not found/.test(dmBadOut));
+check('data_model validation: bad glob (unbalanced brace)', /unbalanced \{ \} in match/.test(dmBadOut));
+check('data_model validation: non-boolean copy', /"copy" must be a boolean/.test(dmBadOut));
+
 done();

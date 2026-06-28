@@ -564,16 +564,53 @@ function copyComponentAssets(kind) {
 const copyComponentCSS = () => copyComponentAssets('css');
 const copyComponentJS = () => copyComponentAssets('js');
 
-// Copy a collection whose items declare a `data_model`: copy every file of each item
-// EXCEPT those matching a part marked `copy: false`. `copy` defaults true (this is the
-// leak-control *mechanism*; the default flips to false in a later task). Match globs are
-// item-relative. Items are the immediate subfolders of the source; top-level files copy
-// as-is. `required` is enforced separately by the build-time validation.
+// Validate a collection's data_model shape (build-time, loud). Returns a list of error
+// strings; empty means valid.
+function validateDataModel(collection) {
+  const model = collection.data_model;
+  if (typeof model !== 'object' || model === null || Array.isArray(model)) {
+    return ['data_model must be an object keyed by part name'];
+  }
+  const errors = [];
+  for (const [name, part] of Object.entries(model)) {
+    if (typeof part !== 'object' || part === null || Array.isArray(part)) {
+      errors.push(`part "${name}" must be an object`);
+      continue;
+    }
+    if (typeof part.match !== 'string' || part.match.trim() === '') {
+      errors.push(`part "${name}" needs a non-empty string "match"`);
+    } else if ((part.match.match(/\{/g) || []).length !== (part.match.match(/\}/g) || []).length) {
+      errors.push(`part "${name}": unbalanced { } in match "${part.match}"`);
+    }
+    if ('copy' in part && typeof part.copy !== 'boolean') errors.push(`part "${name}": "copy" must be a boolean`);
+    if ('required' in part && typeof part.required !== 'boolean') errors.push(`part "${name}": "required" must be a boolean`);
+  }
+  return errors;
+}
+
+// Recursively list files under a folder as paths relative to it (forward slashes).
+function listFilesRelative(dir, rel = '') {
+  const out = [];
+  fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+    const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out.push(...listFilesRelative(path.join(dir, entry.name), relPath));
+    else out.push(relPath);
+  });
+  return out;
+}
+
+// Copy a collection whose items declare a `data_model`: copy every item file EXCEPT those
+// matching a part marked `copy: false` (`copy` defaults true - the leak-control mechanism;
+// the default flips to false in a later task). Globs are item-relative; items are the
+// immediate subfolders of the source, and top-level files copy as-is. A `required: true`
+// part with no matching file in an item is a loud build error.
 function copyCollectionByModel(collection, sourcePath, destPath) {
-  const skipMatchers = Object.values(collection.data_model || {})
-    .filter(part => part && part.copy === false && part.match)
-    .map(part => globToRegExp(part.match));
-  const skip = (relPath) => skipMatchers.some(re => re.test(relPath));
+  const parts = Object.entries(collection.data_model).map(([name, p]) => ({
+    name, match: p.match, regex: globToRegExp(p.match),
+    copy: p.copy !== false, required: p.required === true
+  }));
+  const skip = (relPath) => parts.some(p => !p.copy && p.regex.test(relPath));
+  const requiredParts = parts.filter(p => p.required);
 
   let itemCount = 0;
   fs.readdirSync(sourcePath, { withFileTypes: true }).forEach(entry => {
@@ -581,29 +618,25 @@ function copyCollectionByModel(collection, sourcePath, destPath) {
     const dest = path.join(destPath, entry.name);
     if (entry.isDirectory()) {
       itemCount++;
-      copyItemFiltered(src, dest, skip);
+      const files = listFilesRelative(src);
+      requiredParts.forEach(rp => {
+        if (!files.some(f => rp.regex.test(f))) {
+          console.error(`[ERROR] ${collection.name}/${entry.name}: required "${rp.name}" (match ${rp.match}) not found`);
+          buildErrors++;
+        }
+      });
+      files.forEach(rel => {
+        if (skip(rel)) return;
+        const fdest = path.join(dest, rel);
+        fs.mkdirSync(path.dirname(fdest), { recursive: true });
+        fs.copyFileSync(path.join(src, rel), fdest);
+      });
     } else if (!skip(entry.name)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(src, dest);
     }
   });
   console.log(`  [MODEL]  ${collection.name}: ${collection.source} → ${collection.destination} (${itemCount} item(s))`);
-}
-
-// Recursively copy an item folder, skipping files whose item-relative path matches a
-// `copy: false` part.
-function copyItemFiltered(itemSrc, itemDest, skip, rel = '') {
-  fs.readdirSync(itemSrc, { withFileTypes: true }).forEach(entry => {
-    const relPath = rel ? `${rel}/${entry.name}` : entry.name;
-    const src = path.join(itemSrc, entry.name);
-    const dest = path.join(itemDest, entry.name);
-    if (entry.isDirectory()) {
-      copyItemFiltered(src, dest, skip, relPath);
-    } else if (!skip(relPath)) {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.copyFileSync(src, dest);
-    }
-  });
 }
 
 // Function to copy collections (products, custom items, etc.) based on database.json
@@ -638,6 +671,13 @@ function copyCollections() {
       console.log(`  [FOLDER] ${collection.name}: ${collection.source} → ${collection.destination}`);
       console.log(`  [WARNING] ${collection.name}: no data_model - copying the whole collection; declare one to control which parts ship to build/`);
       return;
+    }
+
+    const modelErrors = validateDataModel(collection);
+    if (modelErrors.length) {
+      modelErrors.forEach(m => console.error(`[ERROR] ${collection.name}: ${m}`));
+      buildErrors += modelErrors.length;
+      return; // don't copy with a broken data_model
     }
 
     copyCollectionByModel(collection, sourcePath, destPath);
