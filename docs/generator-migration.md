@@ -40,22 +40,24 @@ leading `_`). A `_`-prefixed **non-template** page is excluded from the build.
 ```js
 // generators/<file>.js  — DATA ONLY (no template, no page JSON, no file writes)
 module.exports = {
-  generate(ctx, options) {
+  generate(ctx) {
     // ctx = { siteRoot, engineRoot, buildDir,
     //         lib: { slugify, escapeHtml, raw },
-    //         collection: { dir, webPath } }   // resolved from options.source
-    // options = the template's generatorOptions
-    return [
-      { slug: 'red-brick', title: 'Red Brick', description: '…',
-        vars: { /* values for the template's {{PLACEHOLDERS}} */ } }
-    ];
+    //         collection: { options, dir, webPath, items } }   // resolved from options.source
+    // ctx.collection.items = [{ id, item }] - the engine pre-resolves each item from the
+    //   data_model: `id` is the {slug}, `item` is keyed by part (item.data parsed, item.images
+    //   web paths). Read these instead of doing file I/O (dir/webPath remain for raw scanning).
+    return ctx.collection.items.map(({ id, item }) => ({
+      slug: id, title: item.data.name, description: item.data.description,
+      vars: { /* values for the template's {{PLACEHOLDERS}} */ }
+    }));
   }
 };
 ```
 
 - `vars` text is HTML-escaped by the engine; insert HTML fragments with `ctx.lib.raw(...)`.
-- Read collection data from `ctx.collection.dir` (post-collection-copy under `build/`) and
-  build image URLs under `ctx.collection.webPath` (the collection's `destination`).
+- A collection's `data_model` surfaces each item into `ctx.collection.items` and controls which
+  files reach `build/` (`copy` defaults **false** — mark web assets `copy: true`).
 - The engine derives each page name from `generatorOptions.pageName` (substituting `{slug}`),
   inherits the template's `layout` / `header_theme` / `components`, fills the template HTML,
   and builds it through the normal page pipeline.
@@ -75,7 +77,7 @@ disabled collection; or two pages resolving to the same `<page>.html` (name coll
 | owns its HTML template (read via `__dirname`) | template moves to a `pages/<name>/` **template page** |
 | writes `{ page, title, layout, components, content }` JSON to `ctx.outputDir` | returns `[{ slug, title, description, vars }]` |
 | computes the page name itself (e.g. `product-<id>`) | engine applies `generatorOptions.pageName` to each `slug` |
-| reads `path.join(ctx.buildDir, '<dest>')` | reads `ctx.collection.dir` (named by `generatorOptions.source`) |
+| reads `path.join(ctx.buildDir, '<dest>')` + scans for files | reads `ctx.collection.items` (the engine surfaces data/images from the `data_model`) |
 | auto-run by scanning `generators/*.build.js` | referenced **by name** from a template page (`generators/registry.json`) |
 | file named `*.build.js` | file named `*.js` (the `.build.js` auto-run scan is gone) |
 

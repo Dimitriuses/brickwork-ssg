@@ -69,8 +69,9 @@ Clone a site with its engine in one step: `git clone --recurse-submodules <site-
   any engine component or the layout, without forking engine logic.
 - **Collections** — `shared/database.json` maps data folders (e.g. `products/`)
   into the build; a template page turns each item into a generated detail page. An optional
-  per-collection `data_model` (`{ match, copy, required }` per part) controls which item
-  files reach `build/` — e.g. keep raw `product.json` out of the output (leak control).
+  per-collection `data_model` (`{ match, type, copy, required }` per part) both surfaces each
+  item to generators (`ctx.collection.items`) and controls which files reach `build/` —
+  `copy` defaults **false**, so raw `product.json` stays out of the output (leak control).
 - **Safe templating** — values are HTML-escaped by default (`raw()` opt-out),
   ids are slugified, and the build exits non-zero on any page failure.
 

@@ -104,6 +104,11 @@ const productHtml = fs.existsSync(path.join(buildDir, 'product-sample-1.html'))
   ? fs.readFileSync(path.join(buildDir, 'product-sample-1.html'), 'utf8') : '';
 check('built-in generator filled the detail template (carousel + title)',
   productHtml.includes('carousel-item') && productHtml.includes('product-detail-title'));
+// A2: the built-in path reads ctx.collection.items, so the data file (copy:false) stays out of
+// build/ while images (copy:true) ship - leak control, end to end.
+check('A2: collection data file not shipped (copy:false), images shipped (copy:true)',
+  !fs.existsSync(path.join(buildDir, 'products', 'sample-1', 'product.json')) &&
+  fs.existsSync(path.join(buildDir, 'products', 'sample-1', 'p.png')));
 check('detail template integrates contactIcons (no leftover placeholder)',
   !productHtml.includes('{{COMPONENT:contactIcons}}'));
 // Phase 5: page assets are generalized - the built-in detail page links its template
@@ -174,10 +179,10 @@ try {
   dmOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
 }
 const dmBuild = path.join(root, 'test', 'fixtures', 'data-model', 'build');
-check('data_model: image part (default copy) reaches build',
+check('data_model: copy:true part reaches build',
   fs.existsSync(path.join(dmBuild, 'stuff', 'item-1', 'pic.png')));
-check('data_model: undeclared file is still copied (permissive)',
-  fs.existsSync(path.join(dmBuild, 'stuff', 'item-1', 'notes.txt')));
+check('data_model: undeclared file is NOT copied (copy defaults false)',
+  !fs.existsSync(path.join(dmBuild, 'stuff', 'item-1', 'notes.txt')));
 check('data_model: copy:false part is NOT copied (leak control)',
   !fs.existsSync(path.join(dmBuild, 'stuff', 'item-1', 'info.json')));
 check('data_model: collection without a model still copies whole folder',

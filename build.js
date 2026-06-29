@@ -620,17 +620,19 @@ function listFilesRelative(dir, rel = '') {
   return out;
 }
 
-// Copy a collection whose items declare a `data_model`: copy every item file EXCEPT those
-// matching a part marked `copy: false` (`copy` defaults true - the leak-control mechanism;
-// the default flips to false in a later task). Globs are item-relative; items are the
-// immediate subfolders of the source, and top-level files copy as-is. A `required: true`
-// part with no matching file in an item is a loud build error.
+// Copy a collection whose items declare a `data_model`. **`copy` defaults false** (safe by
+// default): a file ships only if a part with `copy: true` matches it; everything else (parts
+// with `copy: false`, parts that omit `copy`, and undeclared files) stays out of build/. Globs
+// are item-relative; items are the immediate subfolders of the source. A `required: true` part
+// with no matching file in an item is a loud build error.
 function copyCollectionByModel(collection, sourcePath, destPath) {
-  const parts = Object.entries(collection.data_model).map(([name, p]) => ({
-    name, match: p.match, regex: globToRegExp(p.match),
-    copy: p.copy !== false, required: p.required === true
-  }));
-  const skip = (relPath) => parts.some(p => !p.copy && p.regex.test(relPath));
+  const parts = Object.entries(collection.data_model).map(([name, p]) => {
+    if (!('copy' in p)) {
+      deferWarning(`collection "${collection.name}" part "${name}": no \`copy\` - its files will NOT ship to build/; set \`copy: true\` to ship or \`copy: false\` to silence`);
+    }
+    return { name, match: p.match, regex: globToRegExp(p.match), copy: p.copy === true, required: p.required === true };
+  });
+  const shouldCopy = (relPath) => parts.some(p => p.copy && p.regex.test(relPath));
   const requiredParts = parts.filter(p => p.required);
 
   let itemCount = 0;
@@ -647,12 +649,12 @@ function copyCollectionByModel(collection, sourcePath, destPath) {
         }
       });
       files.forEach(rel => {
-        if (skip(rel)) return;
+        if (!shouldCopy(rel)) return;
         const fdest = path.join(dest, rel);
         fs.mkdirSync(path.dirname(fdest), { recursive: true });
         fs.copyFileSync(path.join(src, rel), fdest);
       });
-    } else if (!skip(entry.name)) {
+    } else if (shouldCopy(entry.name)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(src, dest);
     }
@@ -672,6 +674,9 @@ function resolveCollectionItems(collection) {
   const sourcePath = path.join(SITE_ROOT, collection.source);
   if (!fs.existsSync(sourcePath)) return [];
   const model = collection.data_model || {};
+  if (!collection.data_model) {
+    deferWarning(`collection "${collection.name}" is used by a template but has no data_model - ctx.collection.items will be empty; add a data_model to surface item data/images`);
+  }
 
   // Per-part setup; omitted `type`/`required` warn once (grouped at the end).
   const parts = Object.entries(model).map(([name, part]) => {
