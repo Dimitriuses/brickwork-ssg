@@ -134,7 +134,7 @@ try {
   invalidOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
 }
 check('invalid templates fail the build (non-zero exit)', invalidExit !== 0);
-check('validation: missing generator', /generatorOptions\.generator is required/.test(invalidOut));
+check('validation: neither generator nor source', /generatorOptions needs a `generator` or a `source`/.test(invalidOut));
 check('validation: missing pageName', /generatorOptions\.pageName is required/.test(invalidOut));
 check('validation: unknown generator', /unknown generator "nope-gen"/.test(invalidOut));
 check('validation: source collection not found', /source collection "nope" not found/.test(invalidOut));
@@ -203,6 +203,8 @@ check('data_model validation: invalid model fails the build', dmBadExit !== 0);
 check('data_model validation: required-but-missing', /required "data" \(match data\.json\) not found/.test(dmBadOut));
 check('data_model validation: bad glob (unbalanced brace)', /unbalanced \{ \} in match/.test(dmBadOut));
 check('data_model validation: non-boolean copy', /"copy" must be a boolean/.test(dmBadOut));
+check('map validation: bad path errors with the path',
+  /map "X" -> "\$nope\.field" references unknown part "nope"/.test(dmBadOut));
 
 // Data completion - A1: the engine resolves ctx.collection.items from the data_model (`type`
 // surfacing), id from folder / item.data.slug. A test generator emits one page per item.
@@ -225,5 +227,13 @@ check('items: copy:false data stays out of build, images ship',
   fs.existsSync(path.join(itemsBuild, 'things', 'alpha', '1.png')));
 check('items: omitted `required` warns (grouped at end)',
   /part "images": no `required`/.test(itemsOut));
+// B1: a generator-free template renders one page per item via `map` ($-paths into item);
+// a map miss resolves to "" and warns.
+const mappedAlpha = fs.existsSync(path.join(itemsBuild, 'mapped-the-alpha.html'))
+  ? fs.readFileSync(path.join(itemsBuild, 'mapped-the-alpha.html'), 'utf8') : '';
+check('map: generator-free template fills placeholders ($data.name)',
+  fs.existsSync(path.join(itemsBuild, 'mapped-the-alpha.html')) && /Alpha/.test(mappedAlpha));
+check('map: a miss resolves to "" and warns',
+  /\[\]/.test(mappedAlpha) && /map path "\$data\.nope" resolved to nothing/.test(itemsOut));
 
 done();

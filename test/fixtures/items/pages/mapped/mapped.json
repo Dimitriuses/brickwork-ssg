@@ -1,0 +1,3 @@
+{ "generatorOptions": { "pageName": "mapped-{slug}", "source": "things",
+    "map": { "NAME": "$data.name", "MISSING": "$data.nope" } },
+  "layout": "_layout", "header_theme": "light" }

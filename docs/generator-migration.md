@@ -62,6 +62,25 @@ module.exports = {
   inherits the template's `layout` / `header_theme` / `components`, fills the template HTML,
   and builds it through the normal page pipeline.
 
+## Generator-free pages (`generatorOptions.map`)
+
+`generator` is **optional**. A template page with just a `source` + a `map` needs no JS at all —
+the engine renders one page per collection item, filling the template from the map:
+
+```jsonc
+// pages/product-detail/product-detail.json
+{ "generatorOptions": {
+    "pageName": "product-{slug}", "source": "products",
+    "map": { "PRODUCT_NAME": "$data.name", "PRODUCT_PRICE": "$data.price" }
+  }, "layout": "_layout" }
+```
+
+A `$`-prefixed value is a path into the item (`$data.name`, `$images`); anything else is a
+literal. A bad path (root isn't a `data_model` part) is a **build error**; a miss (deeper value
+absent) is a **warning** and fills `""`. Computed output (e.g. an image carousel) is done with a
+**component** that receives `$images` — so a standard detail page can be pure config (no generator).
+Reach for a generator only when you need to reshape the collection (group, paginate, aggregate).
+
 ## Build-time validation (loud errors)
 
 The build **fails** with a clear message on: a `generatorOptions` missing `generator` or

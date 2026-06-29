@@ -419,6 +419,43 @@ function buildPage(pageConfig, pageName) {
   console.log(`[BUILD] ${pageData.page}.html - "${pageData.title}"`);
 }
 
+// Resolve a single `map` value against a resolved collection item: a `$`-prefixed string is a
+// data path into the item (`$data.name`, `$images`); anything else is a literal. A path whose
+// deeper segment is absent is a "miss" (warn + ''); a bad root is caught by validateMapPaths.
+function resolveMapValue(value, item) {
+  if (typeof value !== 'string' || value[0] !== '$') return value; // literal
+  let cur = item;
+  for (const seg of value.slice(1).split('.')) {
+    if (cur == null || typeof cur !== 'object' || !(seg in cur)) {
+      deferWarning(`map path "${value}" resolved to nothing for some item(s)`);
+      return '';
+    }
+    cur = cur[seg];
+  }
+  return cur;
+}
+
+// Build a vars object for a template from its `map` (placeholder -> $path/literal) and an item.
+function resolveMap(map, item) {
+  const vars = {};
+  for (const [placeholder, value] of Object.entries(map)) vars[placeholder] = resolveMapValue(value, item);
+  return vars;
+}
+
+// Build-time check: every `$`-path in a map must root at a known data_model part.
+function validateMapPaths(map, partNames, label) {
+  const errors = [];
+  for (const [placeholder, value] of Object.entries(map)) {
+    if (typeof value === 'string' && value[0] === '$') {
+      const root = value.slice(1).split('.')[0];
+      if (!partNames.includes(root)) {
+        errors.push(`Template ${label}: map "${placeholder}" -> "${value}" references unknown part "${root}" (collection parts: ${partNames.join(', ') || 'none'})`);
+      }
+    }
+  }
+  return errors;
+}
+
 // Expand a TEMPLATE page (one carrying generatorOptions) into one built page per
 // item. Resolves the named generator, runs its data-only generate(ctx, options),
 // then for each item fills the template HTML with item.vars and builds it via
@@ -431,22 +468,28 @@ function expandTemplatePage(templateFile, templateConfig) {
   const label = path.basename(templateFile);
   const fail = (message) => { console.error(`[ERROR] Template ${label}: ${message}`); buildErrors++; return 0; };
 
-  // Validate generatorOptions (loud, build-failing).
-  if (!opts.generator) return fail('generatorOptions.generator is required');
+  // Validate generatorOptions (loud, build-failing). `generator` is optional: without it the
+  // engine's built-in path renders one page per collection item via `map`.
   if (!opts.pageName) return fail('generatorOptions.pageName is required');
 
-  const generatorPath = resolveGenerator(opts.generator, {
-    engineGeneratorsDir: GENERATORS_DIR,
-    siteGeneratorsDir: path.join(SITE_ROOT, 'generators')
-  });
-  if (!generatorPath) return fail(`unknown generator "${opts.generator}" (check generators/registry.json)`);
+  let generatorPath = null;
+  if (opts.generator) {
+    generatorPath = resolveGenerator(opts.generator, {
+      engineGeneratorsDir: GENERATORS_DIR,
+      siteGeneratorsDir: path.join(SITE_ROOT, 'generators')
+    });
+    if (!generatorPath) return fail(`unknown generator "${opts.generator}" (check generators/registry.json)`);
+  } else if (!opts.source) {
+    return fail('generatorOptions needs a `generator` or a `source` (the built-in path renders from a collection)');
+  }
 
   // Resolve + validate the source collection (when one is named). The engine pre-resolves the
   // items (data_model -> { id, item }) and hands them on ctx.collection alongside the raw
   // dir/webPath (kept for custom generators that want to scan beyond the model).
+  let collection = null;
   let ctxCollection = { options: opts, dir: null, webPath: null, items: [] };
   if (opts.source) {
-    const collection = (database.collections || []).find(c => c.name === opts.source);
+    collection = (database.collections || []).find(c => c.name === opts.source);
     if (!collection) return fail(`source collection "${opts.source}" not found in database.json`);
     if (!collection.enabled) return fail(`source collection "${opts.source}" is disabled`);
     ctxCollection = {
@@ -465,14 +508,33 @@ function expandTemplatePage(templateFile, templateConfig) {
     collection: ctxCollection
   };
 
-  delete require.cache[generatorPath];
-  const mod = require(generatorPath);
-  if (typeof mod.generate !== 'function') {
-    console.error(`[ERROR] Generator "${opts.generator}" has no generate(ctx, options) export`);
-    buildErrors++;
-    return 0;
+  // Descriptors come from the named generator, or - generator-free - from the engine's built-in
+  // path: one descriptor per collection item, vars filled from `generatorOptions.map`.
+  let descriptors;
+  if (generatorPath) {
+    delete require.cache[generatorPath];
+    const mod = require(generatorPath);
+    if (typeof mod.generate !== 'function') {
+      console.error(`[ERROR] Generator "${opts.generator}" has no generate(ctx, options) export`);
+      buildErrors++;
+      return 0;
+    }
+    descriptors = mod.generate(ctx, opts) || [];
+  } else {
+    const partNames = Object.keys((collection && collection.data_model) || {});
+    const mapErrors = validateMapPaths(opts.map || {}, partNames, label);
+    if (mapErrors.length) {
+      mapErrors.forEach(m => console.error(`[ERROR] ${m}`));
+      buildErrors += mapErrors.length;
+      return 0;
+    }
+    descriptors = ctxCollection.items.map(({ id, item }) => ({
+      slug: id,
+      title: (item.data && item.data.name) || id,
+      description: (item.data && item.data.description) || '',
+      vars: resolveMap(opts.map || {}, item)
+    }));
   }
-  const items = mod.generate(ctx, opts) || [];
 
   // Template HTML lives beside the config: <dir>/<name>.html. Filled per item.
   const templateDir = path.dirname(templateFile);
@@ -481,22 +543,22 @@ function expandTemplatePage(templateFile, templateConfig) {
   const assetsFrom = path.basename(templateDir); // template folder owns the page asset
 
   let built = 0;
-  items.forEach(item => {
-    const pageName = String(opts.pageName || '{slug}').replace(/\{slug\}/g, item.slug);
+  descriptors.forEach(descriptor => {
+    const pageName = String(opts.pageName || '{slug}').replace(/\{slug\}/g, descriptor.slug);
     const pageConfig = {
       page: pageName,
-      title: item.title,
-      description: item.description,
+      title: descriptor.title,
+      description: descriptor.description,
       layout: templateConfig.layout || '_layout',
       header_theme: templateConfig.header_theme,
       components: templateConfig.components || [],
-      content: replaceVariables(templateHtml, item.vars || {}),
+      content: replaceVariables(templateHtml, descriptor.vars || {}),
       assetsFrom
     };
     buildPage(pageConfig, pageName);
     built++;
   });
-  console.log(`[TEMPLATE] ${path.basename(templateDir)}: built ${built} page(s) via "${opts.generator}"`);
+  console.log(`[TEMPLATE] ${path.basename(templateDir)}: built ${built} page(s) via "${opts.generator || 'built-in map'}"`);
   return built;
 }
 

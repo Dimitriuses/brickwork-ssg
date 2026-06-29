@@ -1,0 +1,2 @@
+{ "generatorOptions": { "pageName": "bm-{slug}", "source": "ok", "map": { "X": "$nope.field" } },
+  "layout": "_layout", "header_theme": "light" }
