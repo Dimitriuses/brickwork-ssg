@@ -1,1 +1,1 @@
-{ "generatorOptions": { "generator": "products", "pageName": "d-{slug}", "source": "off" } }
+{ "generatorOptions": { "pageName": "d-{slug}", "source": "off" } }

@@ -76,10 +76,10 @@ const genDirs = {
   engineGeneratorsDir: path.join(root, 'generators'),
   siteGeneratorsDir: path.join(siteDir, 'generators')
 };
-check('resolver: engine-registered name -> engine file',
-  resolveGenerator('products', genDirs) === path.join(root, 'generators', 'generate-detail.js'));
-check('resolver: built-ins share one generator (custom -> same file)',
-  resolveGenerator('custom', genDirs) === path.join(root, 'generators', 'generate-detail.js'));
+// C3 retired the built-in detail generator: product/custom detail pages are now generator-free
+// (data_model + map + carousel). The engine registry is empty, so those names no longer resolve.
+check('resolver: retired built-in detail generator (products/custom -> null)',
+  resolveGenerator('products', genDirs) === null && resolveGenerator('custom', genDirs) === null);
 check('resolver: site registry name -> site file',
   resolveGenerator('collection', genDirs) === path.join(siteDir, 'generators', 'generate-collection.js'));
 check('resolver: unknown name -> null', resolveGenerator('does-not-exist', genDirs) === null);
@@ -100,16 +100,34 @@ check('template: template-page asset copied with marker',
   fs.existsSync(catalogCss) && fs.readFileSync(catalogCss, 'utf8').includes('catalog-marker'));
 check('template page itself not built literally', !fs.existsSync(path.join(buildDir, 'catalog.html')));
 
-// Generator restructure - Phase 3: the legacy dispatch is gone; the built-in product/
-// custom generators are data-only (one generate-detail.js, registered as products+custom)
-// and driven by template pages in example/pages.
-check('built-in "products" template built detail pages',
+// C3: the product/custom detail pages are generator-free (data_model + map + carousel component),
+// driven by template pages in example/pages - no detail generator involved.
+check('generator-free "products" template built detail pages',
   fs.existsSync(path.join(buildDir, 'product-sample-1.html')) &&
   fs.existsSync(path.join(buildDir, 'product-sample-2.html')));
 const productHtml = fs.existsSync(path.join(buildDir, 'product-sample-1.html'))
   ? fs.readFileSync(path.join(buildDir, 'product-sample-1.html'), 'utf8') : '';
-check('built-in generator filled the detail template (carousel + title)',
-  productHtml.includes('carousel-item') && productHtml.includes('product-detail-title'));
+// Map fills the text fields ($data.name -> title); the carousel component renders slides from the
+// item's $images (per-item component vars, B2). sample-1 has 2 images -> a thumbnail strip.
+check('generator-free detail: mapped title + carousel slides from $images',
+  productHtml.includes('product-detail-title') && productHtml.includes('Brick A') &&
+  (productHtml.match(/carousel-item/g) || []).length === 2);
+check('carousel component: multi-image thumbnail strip',
+  (productHtml.match(/thumbnail-image/g) || []).length === 2);
+check('carousel component assets bundled + linked on the detail page',
+  /assets\/css\/carousel\.css/.test(productHtml) && /assets\/js\/carousel\.js/.test(productHtml) &&
+  fs.existsSync(path.join(buildDir, 'assets', 'js', 'carousel.js')));
+// The built-in detail generator file is gone (retired in favour of the declarative path).
+check('generate-detail.js retired (removed from engine)',
+  !fs.existsSync(path.join(root, 'generators', 'generate-detail.js')));
+// C3: the products grid component reads the collection via the `collection` helper (the data
+// model), not raw product.json under build/ - so it stays populated under copy:false. Names come
+// from item.data; links use the same slug as the generated detail pages.
+const shopHtml = fs.existsSync(path.join(buildDir, 'shop.html'))
+  ? fs.readFileSync(path.join(buildDir, 'shop.html'), 'utf8') : '';
+check('products grid is data-model-driven (populated under copy:false)',
+  shopHtml.includes('Brick A') && shopHtml.includes('Brick B') &&
+  shopHtml.includes('product-sample-1.html') && !shopHtml.includes('No products available'));
 // A2: the built-in path reads ctx.collection.items, so the data file (copy:false) stays out of
 // build/ while images (copy:true) ship - leak control, end to end.
 check('A2: collection data file not shipped (copy:false), images shipped (copy:true)',
@@ -122,7 +140,7 @@ check('detail template integrates contactIcons (no leftover placeholder)',
 check('detail page links its template-folder asset (generalized)',
   /assets\/css\/pages\/product-detail\.css/.test(productHtml));
 // A "_"-prefixed TEMPLATE page (_custom-detail) is still discovered (the "_" is just a
-// comment); it drives the "custom" built-in over the custom collection.
+// comment); it generates the custom detail pages (generator-free) over the custom collection.
 check('underscore-prefixed template still discovered',
   fs.existsSync(path.join(buildDir, 'custom-item-a.html')));
 // A "_"-prefixed NORMAL page (_draft) is excluded from the build.

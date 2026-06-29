@@ -106,8 +106,11 @@ disabled collection; or two pages resolving to the same `<page>.html` (name coll
 | file named `*.build.js` | file named `*.js` (the `.build.js` auto-run scan is gone) |
 
 The two built-in generators (`generate-products`, `generate-custom`) became identical once
-the template and source were externalized, so they are now a single `generators/generate-detail.js`
-registered under both `products` and `custom`.
+the template and source were externalized — first collapsing into a single `generate-detail.js`,
+then **retired in v0.4**: with `data_model` surfacing items and a `carousel` component rendering
+`$images`, a detail page needs no generator at all (`source` + `map` + carousel). The engine now
+ships **no built-in detail generator**; product/custom detail pages are the canonical generator-free
+example.
 
 ### From the original `generateProductPages(outputDir)`
 

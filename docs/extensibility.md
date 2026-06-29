@@ -73,6 +73,7 @@ module.exports = {
   - **Refined in v0.2.1:** generators resolve **site-first by filename** — a site generator *shadows* the engine generator of the same name (the engine's is not run), and `product-detail.css|js` page assets resolve site-first too. Differently-named generators emitting the same page still collide (last write wins, with a warning).
 - `ctx.lib` hands generators the engine helpers so they don't reach into `../lib` by relative path (which only works because they live inside the engine today).
 - The same `lib` surface (`{ slugify, escapeHtml, raw }`) is also passed to component `.build.js` scripts as a 4th argument — `build(vars, loadComponent, replaceVariables, helpers)` — so site components can escape and emit HTML without reaching into the engine's `lib/`. Additive and backward-compatible (existing 3-arg scripts ignore it). Implemented in Phase C.
+  - **Extended in v0.4:** `helpers` also carries `collection(name)`, which resolves a collection by name to `{ name, destination, items: [{ id, item }] }` — the same data generators see via `ctx.collection.items`. A component can thus read the **data model** instead of raw files under `build/` (which `data_model` `copy:false` keeps out): the `products` grid reads `helpers.collection('products')` rather than scanning `build/products/*/product.json`.
 
 ### 4. Declarative sub-components
 

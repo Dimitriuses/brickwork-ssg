@@ -258,7 +258,7 @@ function buildComponent(componentName, vars = {}, buildStack = []) {
     delete require.cache[absolutePath]; // Clear cache to allow rebuilds
 
     const buildScript = require(absolutePath);
-    html = buildScript.build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw });
+    html = buildScript.build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw, collection: collectionByName });
   } else {
     // Standard template replacement
     const template = loadComponent(componentName);
@@ -805,6 +805,23 @@ function resolveCollectionItems(collection) {
   });
   _resolvedCollections.set(collection.name, items);
   return items;
+}
+
+// Component build-script accessor (exposed via the helpers arg as `collection`): resolve a
+// collection's items by name - the same data the generators see via ctx.collection.items - so a
+// component can read the data model instead of raw files (which `copy: false` keeps out of build/).
+// Returns { name, destination, items: [{ id, item }] }, or null (+ warning) for an unknown name.
+function collectionByName(name) {
+  const collection = (database.collections || []).find(c => c.name === name);
+  if (!collection) {
+    deferWarning(`a component requested unknown collection "${name}" - check the name against database.json`);
+    return null;
+  }
+  return {
+    name: collection.name,
+    destination: collection.destination,
+    items: resolveCollectionItems(collection)
+  };
 }
 
 // Parse a JSON file; on failure defer a warning and return null (resolution continues).

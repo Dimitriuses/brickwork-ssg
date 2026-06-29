@@ -1,8 +1,11 @@
 # Material indexing, data, & routing — draft plan (for discussion)
 
-> **Status: draft.** Captures the ideas for the "`*.json` material indexing & folder trees"
-> roadmap item, proposes splitting them into tracks, and records recommendations + open
-> questions. Nothing here is decided — it's a starting point to argue with.
+> **Status: Tracks A–C shipped in engine v0.4.0** (A1, A2, B1, C1, C2, B2, C3 — in that order).
+> The data model (`copy:false` + `ctx.collection.items`), declarative `map` + optional generator,
+> per-item component vars, nested/bundled sub-components, and the `carousel` component + generator-free
+> detail pages are all in. The built-in detail generator was retired; the `products` grid reads the
+> model via `helpers.collection`. **Remaining:** Track D (`routing.json`) is still a future task, and
+> the two sites are migrated to the data model in a separate pass (post-v0.4.0).
 
 ## The pieces you outlined
 
@@ -212,10 +215,13 @@ track. Site migration is a separate pass after C.
 - **C2 — bundle sub-component assets.** Collect + copy a registered sub-component's `style.css`/
   `script.js` as a component asset (the main new behavior). Smoke: nested sub-component CSS/JS
   reach `build/` and are linked.
-- **C3 — carousel component + generator-free detail (capstone).** Ship a `carousel` sub-component
-  (`build.js` slides from `$images`, `script.js` controls, `style.css`); the example product
-  detail becomes `data_model` + template + `map` + `carousel`, **no generator**; decide
-  `generate-detail.js`'s fate. Smoke: the generator-free detail page renders with the carousel.
+- **C3 — carousel component + generator-free detail (capstone).** ✅ Shipped a top-level `carousel`
+  component (`build.js` renders slides + thumbnails from `$images`; `script.js` injects controls
+  client-side; `style.css`); the example product **and** custom detail pages became `data_model` +
+  template + `map` + `carousel`, **no generator**. `generate-detail.js` was **retired** (engine
+  registry emptied). Also fixed an A2 regression: the `products` grid now reads the model via the
+  new `helpers.collection(name)` accessor instead of raw `build/` files. Smoke + example site test
+  cover the generator-free detail + carousel + populated grid.
 
 ### Track D — routing
 Its own plan when we get there (kept out of the above).

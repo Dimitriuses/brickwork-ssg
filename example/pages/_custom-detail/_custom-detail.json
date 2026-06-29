@@ -1,10 +1,18 @@
 {
   "generatorOptions": {
-    "generator": "custom",
     "pageName": "custom-{slug}",
-    "source": "custom"
+    "source": "custom",
+    "map": {
+      "PRODUCT_NAME": "$data.name",
+      "PRODUCT_PRICE": "$data.price",
+      "PRODUCT_DESCRIPTION": "$data.description",
+      "PRODUCT_DETAILS": "$data.details"
+    }
   },
   "layout": "_layout",
   "header_theme": "dark",
-  "components": [ { "name": "contactIcons" } ]
+  "components": [
+    { "name": "carousel", "vars": { "IMAGES": "$images", "ALT": "$data.name" } },
+    { "name": "contactIcons" }
+  ]
 }

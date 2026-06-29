@@ -4,7 +4,7 @@ A tiny, zero-config **static-site generator**. Build pages from reusable HTML
 components and content collections — no framework, no client runtime, and zero
 runtime dependencies for the build itself.
 
-> Status: **v0.2.0**. One engine builds many sites; a site embeds this engine
+> Status: **v0.4.0**. One engine builds many sites; a site embeds this engine
 > as a **git submodule** and runs it.
 
 > **Provenance:** this repository was extracted from a larger private project and
@@ -53,8 +53,8 @@ install them once into the submodule: `npm --prefix engine install`.
 **Pin & update the engine** by checking out a release tag inside the submodule:
 
 ```bash
-git -C engine fetch --tags && git -C engine checkout v0.2.0
-git add engine && git commit -m "engine v0.2.0"
+git -C engine fetch --tags && git -C engine checkout v0.4.0
+git add engine && git commit -m "engine v0.4.0"
 ```
 
 Clone a site with its engine in one step: `git clone --recurse-submodules <site-url>`.
@@ -64,7 +64,7 @@ Clone a site with its engine in one step: `git clone --recurse-submodules <site-
 - **Components** — a folder with `<name>.html` (template), optional `style.css`/
   `script.js` (auto-linked only where used), and optional `<name>.build.js` for
   custom logic. Engine ships `header`, `footer`, `hero`, `products`, `faq`,
-  `contactIcons`, and a `_layout`.
+  `contactIcons`, `carousel`, and a `_layout`.
 - **Overrides** — drop a same-named file in your site's `components/` to override
   any engine component or the layout, without forking engine logic.
 - **Collections** — `shared/database.json` maps data folders (e.g. `products/`)
@@ -90,10 +90,11 @@ A site can add its own components, generators, and tests — no engine fork need
   map component names to folders in `components/registry.json`. Build scripts receive
   `build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw })`.
 - **Generators** — a **template page** (a `pages/` config with `generatorOptions`)
-  names a data-only generator that returns one descriptor per item; the engine
-  assembles a page each. Add `generators/<name>.js` exporting
-  `{ generate(ctx, options) }` (returns `[{ slug, title, description, vars }]`) and map
-  it in `generators/registry.json`. See [docs/generator-migration.md](docs/generator-migration.md).
+  turns each collection item into a page. A generator is **optional**: a `source` + a
+  `map` of `$`-paths (plus component `vars` resolved per item, e.g. a `carousel` fed
+  `$images`) generates pages with **no JS**. For custom shaping, add `generators/<name>.js`
+  exporting `{ generate(ctx, options) }` (returns `[{ slug, title, description, vars }]`)
+  and map it in `generators/registry.json`. See [docs/generator-migration.md](docs/generator-migration.md).
 - **Tests** — add `test/<name>.test.js` (`module.exports = (ctx) => { ctx.check(...) }`).
   `ssg test` builds the site, runs the engine's **always-on checks** (content-agnostic
   invariants — broken links, unresolved placeholders, leftover `{{COMPONENT}}` — isolated

@@ -41,8 +41,25 @@ page-driven generators.
 - **Build-time validation** (loud, build-failing): missing `generator`/`pageName`,
   unknown generator, missing/disabled source collection, and `<page>.html` name collisions.
 - A leading `_` is a cosmetic author comment — never used for discovery or output names.
-- Built-in `generate-detail.js` (registered as `products` + `custom`) turns a collection
-  of item folders into detail pages. See [docs/generator-migration.md](docs/generator-migration.md).
+- Built-in `generate-detail.js` (registered as `products` + `custom`) turned a collection
+  of item folders into detail pages — **retired in v0.4** (see below). See [docs/generator-migration.md](docs/generator-migration.md).
+
+### Data model & generator-free pages (v0.4)
+- **Per-collection `data_model`** (`{ match, type, copy, required }` per part) surfaces each
+  item to `ctx.collection.items` (`[{ id, item }]`, `item` keyed by part — `item.data` parsed,
+  `item.images` web paths) **and** whitelists what reaches `build/`: `copy` defaults **false**
+  (leak control — raw `product.json` stays out). Omitted `type`/`required`/`copy` warn (grouped).
+- **Generator-optional template pages**: `generatorOptions.map` (`$`-paths into the item, else
+  literal) fills placeholders with **no generator**; the same `$`-paths resolve in a template
+  page's component `vars` per item (e.g. `carousel` fed `$images`). Bad path → build error; miss → warn.
+- **`carousel` component** (slides + thumbnails server-side from `$images`; controls injected
+  client-side) — the example product/custom detail pages are now **generator-free** (`source` +
+  `map` + `carousel`); `generate-detail.js` retired and the engine registry emptied.
+- **Nested sub-component folders** + **bundled sub-component assets** (`style.css`/`script.js`
+  collected, copied, linked wherever the parent is used).
+- **`helpers.collection(name)`** lets a component build script read the data model (same items as
+  generators) instead of raw `build/` files; the `products` grid uses it.
+- See [docs/material-indexing-plan.md](docs/material-indexing-plan.md). **Pending:** sites migrate to the data model (separate pass); `routing.json` is still future.
 
 ### Content & data
 - `products` component with **client-side pagination** (`PRODUCTS_PER_PAGE`).
@@ -58,14 +75,17 @@ page-driven generators.
 
 ## Planned / not yet built
 
-**Suggested sequence** (dependency-driven, not fixed): **1.** data management & leak prevention →
-**2.** `*.json` material indexing & folder trees → **3.** richer `generatorOptions` →
+**Suggested sequence** (dependency-driven, not fixed): ~~**1.** data management & leak prevention →
+**2.** `*.json` material indexing & folder trees~~ **(both done in v0.4 — see Implemented)** →
+**3.** richer `generatorOptions` *(the declarative `map` landed in v0.4; filters/sort/pagination remain)* →
 **4.** material deploy commands & slim core *(needs 2)*. (Always-on engine self-checks —
 formerly step 1 — is **done**; see Implemented.) **Multi-page pagination** is **deferred** —
 it needs a window-based generation model (below) and is a large task in its own right.
 
 ### Data & generators
-- **Data management & leak prevention** — a per-collection **`data_model`** declares each
+- **✅ Done in v0.4 — Data management & leak prevention** (the `copy:false` default + reads landed
+  together with material indexing; see the v0.4 Implemented section). Original write-up kept for
+  context: a per-collection **`data_model`** declares each
   item's parts (an object keyed by name, e.g. `images`, `data`), each with **`match`** (a
   glob), **`copy`** (does it reach `build/`), and **`required`** (build error if absent).
   Leak control: mark the `data` part `copy: false` so raw `product.json` never ships to
@@ -87,7 +107,11 @@ it needs a window-based generation model (below) and is a large task in its own 
   Postponed until feasible.
 
 ### Indexing & build materials
-- **`*.json` material indexing & folder trees** — move from scanning file lists to
+- **✅ Done in v0.4 — `*.json` material indexing & folder trees** (nested/bundled sub-components,
+  `copy:false` default, `ctx.collection.items`; see the v0.4 Implemented section). Note: the
+  carousel landed as a **top-level** component, not a registered sub-component — the declarative
+  sub-component + nested-folder mechanism is what shipped. Original write-up kept for context:
+  move from scanning file lists to
   **registering** materials (components, generators, tests) via `*.json`, which also enables
   **nested folder trees**: a sub-component lives in its own folder inside its parent (e.g.
   `faq/faq_item`, `products/product_item`) and is *declared* rather than discovered. Because
@@ -121,7 +145,8 @@ it needs a window-based generation model (below) and is a large task in its own 
   stops scaling linearly with item count) is **deferred**: it needs the *window-based
   generation* model above. The two modes are different mechanisms — single-page is pure
   `script.js`, multi-page is build-time — so this is "two implementations behind one flag".
-- **Thin build/generator scripts** — move presentation markup out of the scripts. E.g. the
-  carousel-controls HTML now built inside `generate-detail.js` / `products.build.js` moves
-  to **client-side `script.js`**, keeping build logic and markup separate.
+- **Thin build/generator scripts** — move presentation markup out of the scripts. **Partly done
+  in v0.4:** the new `carousel` component renders only slides + thumbnails server-side and injects
+  the prev/next controls + indicators from its `script.js`. The `products` grid card still builds
+  its mini-carousel controls in `products.build.js` — the same treatment remains to be applied there.
 - **Multiple `style.css` / `script.js` files per page folder.**
