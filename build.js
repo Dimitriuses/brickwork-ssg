@@ -31,6 +31,20 @@ if (fs.existsSync(DATABASE_FILE)) {
   database = JSON.parse(fs.readFileSync(DATABASE_FILE, 'utf8'));
 }
 
+// Deferred build warnings: collected during the build and printed grouped at the end (with a
+// repeat-count and the action text) so guidance isn't lost mid-output.
+const deferredWarnings = new Map(); // message -> count
+function deferWarning(message) {
+  deferredWarnings.set(message, (deferredWarnings.get(message) || 0) + 1);
+}
+function flushDeferredWarnings() {
+  if (deferredWarnings.size === 0) return;
+  console.log('\n[WARNINGS] review these (they may need action):');
+  for (const [message, count] of deferredWarnings) {
+    console.log(`  - ${message}${count > 1 ? ` (x${count})` : ''}`);
+  }
+}
+
 // Flatten config for easier variable replacement
 // Support both flat and nested config formats
 function flattenConfig(obj, prefix = '') {
@@ -427,13 +441,20 @@ function expandTemplatePage(templateFile, templateConfig) {
   });
   if (!generatorPath) return fail(`unknown generator "${opts.generator}" (check generators/registry.json)`);
 
-  // Resolve + validate the source collection (when one is named).
-  let ctxCollection = { dir: null, webPath: null };
+  // Resolve + validate the source collection (when one is named). The engine pre-resolves the
+  // items (data_model -> { id, item }) and hands them on ctx.collection alongside the raw
+  // dir/webPath (kept for custom generators that want to scan beyond the model).
+  let ctxCollection = { options: opts, dir: null, webPath: null, items: [] };
   if (opts.source) {
     const collection = (database.collections || []).find(c => c.name === opts.source);
     if (!collection) return fail(`source collection "${opts.source}" not found in database.json`);
     if (!collection.enabled) return fail(`source collection "${opts.source}" is disabled`);
-    ctxCollection = { dir: path.join(BUILD_DIR, collection.destination), webPath: collection.destination };
+    ctxCollection = {
+      options: opts,
+      dir: path.join(BUILD_DIR, collection.destination),
+      webPath: collection.destination,
+      items: resolveCollectionItems(collection)
+    };
   }
 
   const ctx = {
@@ -639,6 +660,69 @@ function copyCollectionByModel(collection, sourcePath, destPath) {
   console.log(`  [MODEL]  ${collection.name}: ${collection.source} → ${collection.destination} (${itemCount} item(s))`);
 }
 
+// Resolve a collection's items from its source folder via the data_model, surfacing each part
+// per its `type`: `object` (first match parsed), `paths` (matched files -> web paths), or
+// `file_path` (first match -> a web path). Returns [{ id, item }] where item is keyed by part
+// name. `id` (the {slug}) is the item folder, overridden by item.data.slug; both slugified.
+// Reads from the SOURCE (not build/), so it is independent of the `copy` flags. Cached per
+// collection (a collection used by several template pages resolves - and warns - only once).
+const _resolvedCollections = new Map();
+function resolveCollectionItems(collection) {
+  if (_resolvedCollections.has(collection.name)) return _resolvedCollections.get(collection.name);
+  const sourcePath = path.join(SITE_ROOT, collection.source);
+  if (!fs.existsSync(sourcePath)) return [];
+  const model = collection.data_model || {};
+
+  // Per-part setup; omitted `type`/`required` warn once (grouped at the end).
+  const parts = Object.entries(model).map(([name, part]) => {
+    if (!('type' in part)) {
+      deferWarning(`collection "${collection.name}" part "${name}": no \`type\` - defaulting to file_path; set \`type\` (object/paths/file_path) if that's wrong`);
+    }
+    if (!('required' in part)) {
+      deferWarning(`collection "${collection.name}" part "${name}": no \`required\` - defaulting to false; set \`required\` explicitly`);
+    }
+    return { name, regex: globToRegExp(part.match), type: part.type || 'file_path' };
+  });
+
+  const items = [];
+  fs.readdirSync(sourcePath, { withFileTypes: true }).filter(e => e.isDirectory()).forEach(entry => {
+    const folder = entry.name;
+    const itemDir = path.join(sourcePath, folder);
+    const files = listFilesRelative(itemDir).sort();
+    const webPath = (rel) => `${collection.destination}/${folder}/${rel}`;
+    const item = {};
+
+    parts.forEach(part => {
+      const matched = files.filter(f => part.regex.test(f));
+      if (part.type === 'object') {
+        item[part.name] = matched.length ? readJsonSafe(path.join(itemDir, matched[0]), `${collection.name}/${folder}/${matched[0]}`) : null;
+      } else if (part.type === 'paths') {
+        item[part.name] = matched.map(webPath);
+      } else { // file_path
+        if (matched.length > 1) {
+          deferWarning(`collection "${collection.name}" part "${part.name}": file_path matched ${matched.length} files in "${folder}" - using the first`);
+        }
+        item[part.name] = matched.length ? webPath(matched[0]) : null;
+      }
+    });
+
+    const slugBase = (item.data && typeof item.data === 'object' && item.data.slug) || folder;
+    items.push({ id: slugify(String(slugBase)), item });
+  });
+  _resolvedCollections.set(collection.name, items);
+  return items;
+}
+
+// Parse a JSON file; on failure defer a warning and return null (resolution continues).
+function readJsonSafe(file, label) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    deferWarning(`could not parse ${label}: ${error.message}`);
+    return null;
+  }
+}
+
 // Function to copy collections (products, custom items, etc.) based on database.json
 function copyCollections() {
   if (!database.collections || database.collections.length === 0) {
@@ -791,6 +875,8 @@ templatePages.forEach(({ file, config }) => {
     buildErrors++;
   }
 });
+
+flushDeferredWarnings();
 
 const buildTime = ((Date.now() - buildStart) / 1000).toFixed(2);
 

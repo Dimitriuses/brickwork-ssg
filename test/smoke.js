@@ -199,4 +199,26 @@ check('data_model validation: required-but-missing', /required "data" \(match da
 check('data_model validation: bad glob (unbalanced brace)', /unbalanced \{ \} in match/.test(dmBadOut));
 check('data_model validation: non-boolean copy', /"copy" must be a boolean/.test(dmBadOut));
 
+// Data completion - A1: the engine resolves ctx.collection.items from the data_model (`type`
+// surfacing), id from folder / item.data.slug. A test generator emits one page per item.
+let itemsOut = '';
+try {
+  itemsOut = execSync('node cli.js build --site test/fixtures/items', { cwd: root, stdio: 'pipe' }).toString();
+} catch (e) {
+  itemsOut = ((e.stdout || '') + '') + ((e.stderr || '') + '');
+}
+const itemsBuild = path.join(root, 'test', 'fixtures', 'items', 'build');
+const alphaPage = fs.existsSync(path.join(itemsBuild, 'thing-the-alpha.html'))
+  ? fs.readFileSync(path.join(itemsBuild, 'thing-the-alpha.html'), 'utf8') : '';
+check('items: slug overridden by item.data.slug', fs.existsSync(path.join(itemsBuild, 'thing-the-alpha.html')));
+check('items: slug falls back to the folder name', fs.existsSync(path.join(itemsBuild, 'thing-beta.html')));
+check('items: object part parsed (data.name surfaced)', /Alpha/.test(alphaPage));
+check('items: paths part -> web paths + count',
+  /things\/alpha\/1\.png/.test(alphaPage) && /thing-count">2/.test(alphaPage));
+check('items: copy:false data stays out of build, images ship',
+  !fs.existsSync(path.join(itemsBuild, 'things', 'alpha', 'info.json')) &&
+  fs.existsSync(path.join(itemsBuild, 'things', 'alpha', '1.png')));
+check('items: omitted `required` warns (grouped at end)',
+  /part "images": no `required`/.test(itemsOut));
+
 done();

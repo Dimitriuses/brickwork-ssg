@@ -1,0 +1,7 @@
+{ "collections": [
+  { "name": "things", "source": "shared/things", "destination": "things", "enabled": true,
+    "data_model": {
+      "images": { "match": "*.png", "type": "paths", "copy": true },
+      "data":   { "match": "info.json", "type": "object", "copy": false, "required": true }
+    } }
+] }

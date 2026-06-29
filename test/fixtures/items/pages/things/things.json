@@ -1,0 +1,2 @@
+{ "generatorOptions": { "generator": "dump", "pageName": "thing-{slug}", "source": "things" },
+  "layout": "_layout", "header_theme": "light" }
