@@ -141,14 +141,20 @@ function componentFolder(name) {
   return subcomponentMap()[name] || name;
 }
 
-// Resolve one file of a component, site-first then engine; null if absent.
+// Resolve one file of a component, site-first then engine; null if absent. A sub-component may
+// live in its own nested folder inside the parent (`<parent>/<subName>/<file>`); a flat file in
+// the parent folder (`<parent>/<subName>.<ext>`) still works (back-compat).
 function resolveComponentFile(name, filename) {
-  const folder = componentFolder(name);
+  const parent = subcomponentMap()[name]; // set only for sub-components
+  const folder = parent || name;
   const siteFolder = siteComponentRegistry()[folder] || folder;
-  const candidates = [
-    path.join(SITE_ROOT, 'components', siteFolder, filename),
-    path.join(COMPONENTS_DIR, folder, filename)
-  ];
+  const candidates = [];
+  if (parent) {
+    candidates.push(path.join(SITE_ROOT, 'components', siteFolder, name, filename));
+    candidates.push(path.join(COMPONENTS_DIR, folder, name, filename));
+  }
+  candidates.push(path.join(SITE_ROOT, 'components', siteFolder, filename));
+  candidates.push(path.join(COMPONENTS_DIR, folder, filename));
   for (const c of candidates) if (fs.existsSync(c)) return c;
   return null;
 }
@@ -580,9 +586,10 @@ function collectComponentAssets(kind, components, pageName, assetBase) {
     if (added.has(compName)) return;
     added.add(compName);
 
-    // Dependencies first (depth-first), then this component's own asset - all
-    // resolved site-first so site components and overrides are picked up.
+    // Dependencies and declared sub-components first (depth-first), then this component's own
+    // asset - all resolved site-first. Sub-components get their own bundled asset when used.
     (readComponentConfig(compName).dependencies || []).forEach(addComponent);
+    (readComponentConfig(compName).subComponents || []).forEach(addComponent);
 
     if (resolveComponentFile(compName, sourceFile)) {
       files.push(`assets/${kind}/${compName}.${kind}`);
@@ -625,12 +632,19 @@ function copyComponentAssets(kind) {
     fs.copyFileSync(globalAsset, path.join(buildAssetDir, `global.${kind}`));
   }
 
-  // Component assets (engine + site; site overrides win, registry-relocated too)
+  // Component assets (engine + site; site overrides win, registry-relocated too), plus each
+  // component's declared sub-components (which may carry their own nested assets).
   allComponentNames().forEach(compName => {
     const assetFile = resolveComponentFile(compName, sourceFile);
     if (assetFile) {
       fs.copyFileSync(assetFile, path.join(buildAssetDir, `${compName}.${kind}`));
     }
+    (readComponentConfig(compName).subComponents || []).forEach(subName => {
+      const subAsset = resolveComponentFile(subName, sourceFile);
+      if (subAsset) {
+        fs.copyFileSync(subAsset, path.join(buildAssetDir, `${subName}.${kind}`));
+      }
+    });
   });
 
   // Site page-specific assets (top-level page folders only)

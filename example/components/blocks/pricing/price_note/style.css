@@ -1,0 +1,2 @@
+/* Nested sub-component asset, bundled by the engine (C2). */
+.price-note { font-style: italic; color: var(--bw-text-muted, #888); /* price-note-marker */ }

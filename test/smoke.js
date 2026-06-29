@@ -59,6 +59,12 @@ check('site component CSS linked', /assets\/css\/pricing\.css/.test(index));
 // Phase B: the site component declares its own sub-component (priceRow) in
 // pricing.json, resolved via the dynamic sub-component map.
 check('site sub-component renders (declared priceRow)', index.includes('class="price-row"'));
+// C1/C2: a nested sub-component (price_note, its own folder under pricing/) renders, and its
+// own style.css is bundled + linked when the parent component is used.
+check('nested sub-component renders (C1)', index.includes('class="price-note"'));
+check('nested sub-component asset bundled + linked (C2)',
+  fs.existsSync(path.join(buildDir, 'assets', 'css', 'price_note.css')) &&
+  /assets\/css\/price_note\.css/.test(index));
 // (The Phase C news generator and the v0.2.1 *.build.js auto-run / shadow fixtures
 // were removed in restructure Phase 3 - the legacy dispatch no longer exists; the
 // catalog/product-detail template pages below cover site + built-in generation.)

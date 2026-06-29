@@ -9,9 +9,12 @@ function build(vars, loadComponent, replaceVariables, helpers) {
   const items = plans
     .map(p => replaceVariables(row, { NAME: p.name, PRICE: p.price }))
     .join('');
+  // `price_note` is a nested sub-component (its own folder + style.css under pricing/).
+  const note = replaceVariables(loadComponent('price_note'), { NOTE: vars.NOTE || 'Prices exclude tax.' });
   return replaceVariables(loadComponent('pricing'), {
     PRICING_TITLE: vars.PRICING_TITLE || 'Plans',
-    PRICING_ITEMS: raw(items)
+    PRICING_ITEMS: raw(items),
+    PRICE_NOTE: raw(note)
   });
 }
 

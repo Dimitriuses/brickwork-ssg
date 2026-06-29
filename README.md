@@ -85,8 +85,9 @@ A site can add its own components, generators, and tests — no engine fork need
   `<name>.build.js`, `<name>.json`, `style.css`/`script.js`) into your site; it's
   resolved **site-first**. Override a single engine file (e.g. `header/header.html`)
   and keep the engine's logic. Declare sub-components in `<name>.json`
-  (`"subComponents": ["..."]`), and optionally map names to folders in
-  `components/registry.json`. Build scripts receive
+  (`"subComponents": ["..."]`) — a sub-component may live in its own nested folder
+  (`faq/faq_item/`) with `style.css`/`script.js` the engine bundles for you — and optionally
+  map component names to folders in `components/registry.json`. Build scripts receive
   `build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw })`.
 - **Generators** — a **template page** (a `pages/` config with `generatorOptions`)
   names a data-only generator that returns one descriptor per item; the engine
