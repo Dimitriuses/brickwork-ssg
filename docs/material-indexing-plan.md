@@ -46,12 +46,12 @@ escape hatch.
     as not copied): "part X has no `copy` — its files will NOT ship; set `copy: true`/`false`".
   - `required` — `true` makes the build **error** if no file matches in an item (e.g.
     `product.json`); `false` allows none (e.g. `images`). **Omitting warns** (treated as `false`).
-    *(The field already exists from Task 2 as `required`, with the error + a test; Track A adds
-    the warn-on-omit. Confirm the name — you wrote `require`; we shipped `required`.)*
+    *(Already shipped in Task 2 as `required` — field, error, and test; Track A adds the
+    warn-on-omit.)*
   - `type` — how to **surface** the part into the item: `object` (file parsed → object; JSON for
-    now), `paths` (matched files → array of web paths), or `file_path` (one file → a path).
-    **Omitting defaults to `file_path` and warns** ("specify `type` if it isn't `file_path`").
-    Minimal slice of the deferred richer typing.
+    now), `paths` (matched files → array of web paths), or `file_path` (one file → a path; if
+    several match, the **first, sorted**, + a warning). **Omitting defaults to `file_path` and
+    warns** ("specify `type` if it isn't `file_path`"). Minimal slice of the deferred richer typing.
 
   A real model:
   `images: { match: "...", type: "paths", copy: true, required: false }`,
@@ -60,13 +60,14 @@ escape hatch.
   ```
   ctx.collection = {
     options,                            // the template's generatorOptions
+    dir, webPath,                       // raw source dir + web path - kept for custom generators
     items: [
       { id, item: { <part>: value } }   // item keyed by data_model part:
     ]                                   //   item.data -> {…parsed}, item.images -> [web paths]
   }
   ```
-  - **`id` (the `{slug}`)** = the item **folder name** (slugified) by default, **overridden by
-    `item.data.slug`** when present.
+  - **`id` (the `{slug}`)** = the item **folder name** by default, **overridden by
+    `item.data.slug`** when present — both run through `slugify` (URL-safe).
   - `ctx.lib.slugify` is available, so a **custom** generator derives the same slug consistently.
 - Generators read `ctx.collection.items` instead of doing file I/O — the built-in
   `generate-detail.js` loses its `fs` scan + `IMAGE_EXTS` + path-building.
@@ -176,17 +177,48 @@ The safe answer to the fork you raised:
 - **"Operate without registration" = today's behavior.** So this is opt-in *capability*, not a
   switch that turns the old model off.
 
-## Suggested order & rough size
+## Per-track commit plans
 
-1. **Track A** — data completion. ~2–3 commits (flip default + `ctx.collection.items` +
-   migrate `generate-detail.js`; tests; docs).
-2. **Track B (flat)** — mapping. ~2 commits (map fill + generator merge; tests).
-3. **Track C** — registration / folder-trees. ~3–4 commits (sub-component folders + asset
-   bundling; optional manifest; tests; docs). The biggest of the three.
-4. **Track D** — routing. Its own plan when we get there.
+Recommended overall order: **A1 → A2 → B1 → C1 → C2 → B2 → C3**. The carousel capstone (C3)
+needs A + B + C together. Each commit is "code + smoke fixtures"; docs ride the last commit of a
+track. Site migration is a separate pass after C.
 
-Each track is sequenced so the next can rely on it (B's "elegant" path needs C; the
-carousel-as-component end state is A+B+C together).
+### Track A — finish the data model
+- **A1 — item resolution + `ctx.collection` shape.** Add `type` surfacing (`object`/`paths`/
+  `file_path`, first-match+warn); build `ctx.collection = { options, dir, webPath, items: [{ id,
+  item }] }` (`id` from folder / slugified `item.data.slug`); warn on omitted `copy`/`required`/
+  `type`, **collected and printed grouped at the end** (repeat-count + action text). `copy`
+  default unchanged here (additive) — generators *may* read `items`. Smoke: item shape/surfacing,
+  slug override, grouped warnings.
+- **A2 — flip `copy` default + migrate the built-in.** Omitted `copy` ⇒ not copied (warned);
+  `generate-detail.js` reads `ctx.collection.items` (drop `fs`/`IMAGE_EXTS`/path-building); make
+  the engine `example/` + `data_model` fixtures explicit (`copy`/`required`/`type`). Smoke:
+  `product.json` absent from `build/` by default, detail pages still build from `items`. Docs +
+  migration note.
+
+### Track B — declarative mapping
+- **B1 — `generatorOptions.map` + generator optional.** Fill template placeholders from
+  `$`-paths into `item`; `generator` becomes optional (absent ⇒ built-in "one page per item via
+  `map`"); relax Phase-4 validation; add `map`-path validation (bad path → error w/ path; miss →
+  warn). Smoke: a generator-free template page renders via `map`; bad path errors; miss warns.
+- **B2 — per-item component vars.** Resolve a template page's component `vars` `$`-paths against
+  the item (the "item scope"), so `{ name: "carousel", vars: { IMAGES: "$images" } }` works.
+  (The carousel *component* lands in C3.) Smoke: a component in a generated page gets per-item data.
+
+### Track C — material registration & folder trees
+- **C1 — nested sub-component folders.** Resolve a sub-component living in its own folder inside
+  the parent (`faq/faq_item/`), declared in the parent `.json` / registry; per-file resolution
+  within the tree. Scan stays default; registry additive. Smoke: a nested sub-component renders.
+- **C2 — bundle sub-component assets.** Collect + copy a registered sub-component's `style.css`/
+  `script.js` as a component asset (the main new behavior). Smoke: nested sub-component CSS/JS
+  reach `build/` and are linked.
+- **C3 — carousel component + generator-free detail (capstone).** Ship a `carousel` sub-component
+  (`build.js` slides from `$images`, `script.js` controls, `style.css`); the example product
+  detail becomes `data_model` + template + `map` + `carousel`, **no generator**; decide
+  `generate-detail.js`'s fate. Smoke: the generator-free detail page renders with the carousel.
+
+### Track D — routing
+Its own plan when we get there (kept out of the above).
 
 ## Decisions (resolved) & remaining caveats
 
@@ -194,16 +226,20 @@ carousel-as-component end state is A+B+C together).
 - **Explicit parts** — a part is `{ match, type, copy, required }`; omitting `copy`/`required`/
   `type` **warns** (`copy`/`required` ⇒ `false`; `type` ⇒ `file_path`). `required: true` + no
   match in an item → **build error** (shipped in Task 2).
-- **`type` surfaces a part:** `object` (file parsed → object, JSON for now), `paths` (matched
-  files → web-path array), `file_path` (one file → a path).
-- **Shape:** `ctx.collection = { options, items: [{ id, item }] }` — `options` hoisted once;
-  `item.data` / `item.images` keyed by `data_model` part. `id` (the `{slug}`) = the item folder
-  name, **overridden by `item.data.slug`**. `ctx.lib.slugify` is exposed so custom generators
-  derive the same slug.
+- **`type` surfaces a part:** `object` (parsed), `paths` (web-path array), `file_path` (one path;
+  several matches → first sorted + warn). Omitting → `file_path` + warn.
+- **Shape:** `ctx.collection = { options, dir, webPath, items: [{ id, item }] }` — `options`
+  hoisted once; `dir`/`webPath` kept for custom generators; `item.data`/`item.images` keyed by
+  `data_model` part. `id` (the `{slug}`) = the item folder name, **overridden by `item.data.slug`**
+  — both `slugify`'d. `ctx.lib.slugify` is exposed so custom generators derive the same slug.
 - **`map`** values are **`$`-prefixed** paths into `item` (`$data.name`, `$images`); `$` marks a
   data reference vs. a literal (`type` produces, `$` references — complementary). A *miss* (valid
   path, absent value) **warns**; a *bad path* **errors** with the path.
-- Scope = **no custom generator for standard detail pages** (generators stay as the escape hatch).
+- **Output:** warnings/errors are **grouped at the end** of the build, with a repeat-count and the
+  action text (so the explicit-part warnings read as guidance, not noise). A broader build/test
+  output overhaul is a **separate task after** the current ones.
+- `required` keeps its name (from Task 2). Scope = **no custom generator for standard detail
+  pages** (generators stay as the escape hatch).
 - Names: keep **`components/registry.json`**; mapping is **`generatorOptions.map`**.
 - **Manifests deferred**; **routing is a separate later task**; **carousel → a real component**.
 
@@ -211,8 +247,6 @@ carousel-as-component end state is A+B+C together).
 - **The one big design item:** per-item data → per-page **component vars** (`{ name: "carousel",
   vars: { IMAGES: "$images" } }` resolving against `item`). Nail this mechanism in Track B/C
   before building the carousel.
-- **Name: `require` vs `required`.** Task 2 shipped **`required`** (field + error + test); you
-  wrote `require`. Keep `required` (consistent, already implemented) or rename — quick call.
 - `generator`-optional relaxes the Phase-4 validation; keep the loud errors for what remains
   (unknown generator, missing source/collection, name collisions, bad `map` paths).
 - **Coordinate the default-flip:** the commit that flips `copy` must also make the engine
