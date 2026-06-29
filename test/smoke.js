@@ -211,6 +211,8 @@ check('data_model validation: bad glob (unbalanced brace)', /unbalanced \{ \} in
 check('data_model validation: non-boolean copy', /"copy" must be a boolean/.test(dmBadOut));
 check('map validation: bad path errors with the path',
   /map "X" -> "\$nope\.field" references unknown part "nope"/.test(dmBadOut));
+check('map validation: bad component-var path errors (B2)',
+  /map "Y" -> "\$alsobad\.x" references unknown part "alsobad"/.test(dmBadOut));
 
 // Data completion - A1: the engine resolves ctx.collection.items from the data_model (`type`
 // surfacing), id from folder / item.data.slug. A test generator emits one page per item.
@@ -241,5 +243,8 @@ check('map: generator-free template fills placeholders ($data.name)',
   fs.existsSync(path.join(itemsBuild, 'mapped-the-alpha.html')) && /Alpha/.test(mappedAlpha));
 check('map: a miss resolves to "" and warns',
   /\[\]/.test(mappedAlpha) && /map path "\$data\.nope" resolved to nothing/.test(itemsOut));
+// B2: a template page's component vars resolve $-paths against the item (scalar $data.name and
+// array $images both reach the badge component).
+check('component vars resolve per item (B2)', /class="badge">Alpha \(2\)/.test(mappedAlpha));
 
 done();

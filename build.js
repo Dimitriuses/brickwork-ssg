@@ -448,6 +448,14 @@ function resolveMap(map, item) {
   return vars;
 }
 
+// Resolve a template page's component `vars` $-paths against a per-item scope, so a generated
+// page's components (e.g. a carousel taking `$images`) receive this item's data. No-op without an
+// item (e.g. the generator path, unless a generator attaches `item` to its descriptor).
+function resolveComponentVars(components, item) {
+  if (!item) return components;
+  return components.map(comp => (comp && comp.vars) ? { ...comp, vars: resolveMap(comp.vars, item) } : comp);
+}
+
 // Build-time check: every `$`-path in a map must root at a known data_model part.
 function validateMapPaths(map, partNames, label) {
   const errors = [];
@@ -529,6 +537,10 @@ function expandTemplatePage(templateFile, templateConfig) {
   } else {
     const partNames = Object.keys((collection && collection.data_model) || {});
     const mapErrors = validateMapPaths(opts.map || {}, partNames, label);
+    // Component vars resolve against the item too, so validate their $-paths the same way.
+    (templateConfig.components || []).forEach(comp => {
+      validateMapPaths(comp.vars || {}, partNames, label).forEach(m => mapErrors.push(m));
+    });
     if (mapErrors.length) {
       mapErrors.forEach(m => console.error(`[ERROR] ${m}`));
       buildErrors += mapErrors.length;
@@ -538,7 +550,8 @@ function expandTemplatePage(templateFile, templateConfig) {
       slug: id,
       title: (item.data && item.data.name) || id,
       description: (item.data && item.data.description) || '',
-      vars: resolveMap(opts.map || {}, item)
+      vars: resolveMap(opts.map || {}, item),
+      item
     }));
   }
 
@@ -557,7 +570,7 @@ function expandTemplatePage(templateFile, templateConfig) {
       description: descriptor.description,
       layout: templateConfig.layout || '_layout',
       header_theme: templateConfig.header_theme,
-      components: templateConfig.components || [],
+      components: resolveComponentVars(templateConfig.components || [], descriptor.item),
       content: replaceVariables(templateHtml, descriptor.vars || {}),
       assetsFrom
     };

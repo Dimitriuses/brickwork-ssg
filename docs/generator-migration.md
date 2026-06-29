@@ -72,14 +72,19 @@ the engine renders one page per collection item, filling the template from the m
 { "generatorOptions": {
     "pageName": "product-{slug}", "source": "products",
     "map": { "PRODUCT_NAME": "$data.name", "PRODUCT_PRICE": "$data.price" }
-  }, "layout": "_layout" }
+  },
+  "layout": "_layout",
+  "components": [ { "name": "carousel", "vars": { "IMAGES": "$images" } } ] }
 ```
 
 A `$`-prefixed value is a path into the item (`$data.name`, `$images`); anything else is a
-literal. A bad path (root isn't a `data_model` part) is a **build error**; a miss (deeper value
-absent) is a **warning** and fills `""`. Computed output (e.g. an image carousel) is done with a
-**component** that receives `$images` — so a standard detail page can be pure config (no generator).
-Reach for a generator only when you need to reshape the collection (group, paginate, aggregate).
+literal. The same `$`-paths work in a **component's `vars`** — they resolve against *this item*,
+so a generated page's components (e.g. a `carousel` taking `$images`) get per-item data. A bad
+path (root isn't a `data_model` part) is a **build error** (in `map` or component vars); a miss
+(deeper value absent) is a **warning** and fills `""`. So computed output (the carousel) is just a
+component — a standard detail page can be pure config. Reach for a generator only when you need to
+reshape the collection (group, paginate, aggregate); a generator can opt a descriptor into per-item
+component vars by attaching its `item`.
 
 ## Build-time validation (loud errors)
 

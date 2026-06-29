@@ -1,2 +1,3 @@
 { "generatorOptions": { "pageName": "bm-{slug}", "source": "ok", "map": { "X": "$nope.field" } },
-  "layout": "_layout", "header_theme": "light" }
+  "layout": "_layout", "header_theme": "light",
+  "components": [ { "name": "badge", "vars": { "Y": "$alsobad.x" } } ] }
