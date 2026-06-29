@@ -59,7 +59,7 @@ page-driven generators.
   collected, copied, linked wherever the parent is used).
 - **`helpers.collection(name)`** lets a component build script read the data model (same items as
   generators) instead of raw `build/` files; the `products` grid uses it.
-- See [docs/material-indexing-plan.md](docs/material-indexing-plan.md). **Pending:** sites migrate to the data model (separate pass); `routing.json` is still future.
+- See [docs/material-indexing-plan.md](docs/material-indexing-plan.md). Both sites (private + demo) were migrated to the data model after v0.4.0; `routing.json` and the build/test output overhaul are now tracked below (Planned).
 
 ### Content & data
 - `products` component with **client-side pagination** (`PRODUCTS_PER_PAGE`).
