@@ -4,8 +4,9 @@
 > The data model (`copy:false` + `ctx.collection.items`), declarative `map` + optional generator,
 > per-item component vars, nested/bundled sub-components, and the `carousel` component + generator-free
 > detail pages are all in. The built-in detail generator was retired; the `products` grid reads the
-> model via `helpers.collection`. **Remaining:** Track D (`routing.json`) is still a future task, and
-> the two sites are migrated to the data model in a separate pass (post-v0.4.0).
+> model via `helpers.collection`. Both sites (private + demo) were migrated to the data model after
+> v0.4.0. **Out of scope now:** Track D (`routing.json`) and the build/test output overhaul (terminal
+> UX) were **moved to [ROADMAP.md](../ROADMAP.md)** as their own follow-up tasks.
 
 ## The pieces you outlined
 
@@ -153,21 +154,11 @@ explicit indexing — without losing zero-config.
 
 ---
 
-## Track D — `routing.json` (recommend: separate task, later)
+## Track D — `routing.json`
 
-**Goal:** map URLs to page folders, allow nested URLs (`shop/product-256`, `app/dashboard`),
-and optionally move `generatorOptions` into the routing layer.
-
-**Why I'd split it out**
-- It's a **distinct, large** concern: URL structure, **nested output paths**, link
-  resolution/normalization — and it touches *every* page, not just collections/materials.
-- It **collides with a decision we just shipped**: `generatorOptions` lives in the page config
-  and *marks* a template page. Moving it into `routing.json` is churn we shouldn't take while
-  the data/indexing tracks are in flight.
-- You're "evaluating relevance" — exactly right. Prove the data + indexing tracks first, then
-  decide whether routing earns its complexity.
-
-**Recommendation:** defer to its own task; keep `generatorOptions` in the page config for now.
+**Moved to the backlog** — see [ROADMAP.md](../ROADMAP.md) ("Pages & assets"). Routing was always
+its own later task: keep `generatorOptions` in the page config for now and decide whether routing
+earns its complexity once the data + indexing tracks have proven out (they shipped in v0.4).
 
 ---
 
@@ -224,7 +215,7 @@ track. Site migration is a separate pass after C.
   cover the generator-free detail + carousel + populated grid.
 
 ### Track D — routing
-Its own plan when we get there (kept out of the above).
+Moved to [ROADMAP.md](../ROADMAP.md) — its own task when we get there.
 
 ## Decisions (resolved) & remaining caveats
 
@@ -243,7 +234,8 @@ Its own plan when we get there (kept out of the above).
   path, absent value) **warns**; a *bad path* **errors** with the path.
 - **Output:** warnings/errors are **grouped at the end** of the build, with a repeat-count and the
   action text (so the explicit-part warnings read as guidance, not noise). A broader build/test
-  output overhaul is a **separate task after** the current ones.
+  output overhaul (terminal UX) is **moved to the backlog** — see [ROADMAP.md](../ROADMAP.md)
+  ("Tooling & distribution").
 - `required` keeps its name (from Task 2). Scope = **no custom generator for standard detail
   pages** (generators stay as the escape hatch).
 - Names: keep **`components/registry.json`**; mapping is **`generatorOptions.map`**.

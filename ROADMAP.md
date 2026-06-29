@@ -138,6 +138,11 @@ it needs a window-based generation model (below) and is a large task in its own 
 - **npm-distributed third-party plugins/themes + a material registry** — third-party/shared
   distribution (e.g. a community "materials" project people add to), once the deploy model
   is proven.
+- **Build/test output overhaul (terminal UX)** — a broader pass over the CLI's build/test output,
+  beyond the v0.4 grouped warnings (repeat-count + action text). Make errors/warnings/summaries read
+  as clear guidance — consistent prefixes + severity, per-phase grouping, quiet/verbose levels — so
+  the output is signal, not noise. (Split out of the [material-indexing plan](docs/material-indexing-plan.md)
+  as a separate follow-up.)
 
 ### Pages & assets
 - **Selectable pagination modes** — **single-page** (client-side, all cards rendered;
@@ -150,3 +155,11 @@ it needs a window-based generation model (below) and is a large task in its own 
   the prev/next controls + indicators from its `script.js`. The `products` grid card still builds
   its mini-carousel controls in `products.build.js` — the same treatment remains to be applied there.
 - **Multiple `style.css` / `script.js` files per page folder.**
+- **`routing.json` — URL → page mapping** *(its own task; deferred)*. Map site URLs to page
+  folders and allow **nested output paths** (`shop/product-256`, `app/dashboard`), with link
+  resolution/normalization across every page; optionally move `generatorOptions` into the routing
+  layer. A distinct, large concern that touches *every* page, not just collections — and it
+  collides with today's decision that `generatorOptions` lives in the page config and *marks* a
+  template page. Prove the data + indexing tracks first (done in v0.4), then decide whether routing
+  earns its complexity; keep `generatorOptions` in the page config until then. (Was Track D of the
+  [material-indexing plan](docs/material-indexing-plan.md).)
