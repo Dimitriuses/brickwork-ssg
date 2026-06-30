@@ -59,28 +59,31 @@ schema (decided):
 {
   "timestamp": "2026-06-30T14:22:05.123Z",  // UTC, ISO 8601 + ms — exactly Node's Date.toISOString()
   "phase":     "collections",               // build | test | collections | templates | assets | … (extensible)
-  "level":     "WARNING",                   // SUCCESS | INFO | WARNING | ERROR | DEBUG | … (extensible)
-  "logger":    "build.js",                  // who emitted it (provenance) — see below
+  "level":     "WARNING",                   // SUCCESS | INFO | WARNING | ERROR | DEBUG (+ extensible)
+  "logger":    "component",                 // coarse origin (subsystem) — see below
   "message":   "no `copy` — files will not ship",
-  "metadata":  { "group": "products",
-                 "hint":  "set copy:true to ship or copy:false to silence",
-                 "count": 1 }               // + any producer-specific extras
+  "metadata":  { "source": "carousel.build.js",   // fine origin (file/name)
+                 "group":  "products",
+                 "hint":   "set copy:true to ship or copy:false to silence",
+                 "count":  1 }              // metadata is fully open — any producer extras
 }
 ```
 
-- **Grouping is by `level` + `phase`** (decided). `metadata.group` is the optional finer key (a
-  collection/component name); `metadata.hint` is the action text; `metadata.count` collapses repeats
-  (generalising `flushDeferredWarnings`); anything else a producer wants rides in `metadata`.
+- **Grouping is by `level` + `phase`** (decided). `metadata.group` is the optional finer grouping key
+  (a collection/component name); `metadata.hint` is the action text; `metadata.count` collapses
+  repeats (generalising `flushDeferredWarnings`). **`metadata` is fully open** — no reserved keys;
+  the console renderer just *looks for* the well-known ones (`source`/`group`/`hint`/`count`) and
+  ignores the rest, while `jsonl` keeps everything.
 - **`phase` is passed per call** — the producer knows its phase; the logger tracks no hidden
   "current phase".
-- **`logger` = provenance**: which subsystem/file emitted the line (`build.js`, `assets`,
-  `<component>.build.js`, `<generator>.js`, `check()`, …). Mostly **auto-filled, not hand-typed** —
-  the scoped logger handed to a build script/generator pre-binds `logger` (and usually `phase`), so a
-  component just calls `log.warn(msg, { hint })` and the record gets `logger: "carousel.build.js"`
-  for free. `phase` answers *when*, `logger` answers *who* — orthogonal, both useful.
-
-> Two small casing calls (flagged, not yet locked): JSON keys read best all-lowercase, so I've
-> written **`logger`** (you wrote `Logger`); `level` **values** stay UPPERCASE as you specified.
+- **Provenance is two-level (decided):** **`logger`** is the **coarse** origin — the subsystem
+  (`engine`/`build`, `component`, `generator`, `page`, `test`, …) — and **`metadata.source`** is the
+  **fine** one (the actual file/name: `carousel.build.js`, `generate-guides.js`, a check's name).
+  Both are mostly **auto-filled**: the scoped logger handed to a build script/generator pre-binds
+  `logger` + `metadata.source` (and usually `phase`), so a component just calls
+  `log.warn(msg, { hint })`. `phase` = *when*, `logger`/`source` = *who*.
+- **Casing/levels (decided):** the key is lowercase **`logger`**; `level` **values** are UPPERCASE and
+  the set is `SUCCESS | INFO | WARNING | ERROR | DEBUG` (`DEBUG` is the verbose-only tier).
 
 ## Collect → sort → display
 
@@ -165,9 +168,10 @@ A single top-level **`log`** object, with shared keys plus optional per-command 
 - **Default location: a `log/` folder at the site root, named `<datetime>.<ext>`** — one file per
   build, so there's no truncate-vs-append question and runs don't clobber each other. Folder/filename
   configurable (`dir` / `path`) in `config.json` or via `--log file=…`.
-- **Filename = compact UTC timestamp** (decided): `<YYYYMMDDThhmmsssssZ>.<ext>`, e.g.
-  `20260630T142205123Z.jsonl`. It's `Date.toISOString()` with the separators stripped
-  (`.replace(/[-:.]/g,'')`) — colon-free, so Windows-safe, and sorts chronologically by name.
+- **Filename = compact UTC timestamp + pid** (decided): `<YYYYMMDDThhmmsssssZ>-<pid>.<ext>`, e.g.
+  `20260630T142205123Z-04812.jsonl`. The stamp is `Date.toISOString()` with separators stripped
+  (`.replace(/[-:.]/g,'')`) — colon-free (Windows-safe) and name-sorts chronologically; the
+  `process.pid` suffix de-collides two runs that start in the same millisecond (e.g. parallel CI).
 - The file is **always un-coloured** (ANSI stripped) and may run at a **higher level than the
   console** — e.g. console `normal` (summary only on screen) while the file captures `verbose`.
 - **`log/` is a build artifact → gitignored** (added to the engine `.gitignore`; sites that adopt
@@ -329,29 +333,45 @@ case stays a single `level`.
   optional. A single top-level `log` object with optional `build`/`test` overrides.
 - **CLI override:** `--log key=value`, **multiple pairs** (repeated and/or comma-joined); `--quiet`/
   `--verbose`/`--no-color` are aliases.
-- **Record schema:** `{ timestamp (UTC ISO+ms), phase, level (UPPERCASE), logger, message, metadata{
-  group, hint, count, … } }` — the in-memory record *is* the `jsonl` line. `logger` is provenance,
-  auto-filled by scoped loggers.
-- **File sink:** opt-in, **per-run file** at `log/<YYYYMMDDThhmmsssssZ>.<ext>` (compact UTC,
-  configurable `dir`/`path`), un-coloured, **append-streamed per record** (crash-durable). `log/`
-  gitignored.
+- **Record schema:** `{ timestamp (UTC ISO+ms), phase, level (UPPERCASE incl. DEBUG), logger,
+  message, metadata{…} }` — the in-memory record *is* the `jsonl` line. Provenance is two-level:
+  `logger` (coarse subsystem) + `metadata.source` (fine file/name), both auto-filled. `metadata` is
+  fully open (no reserved keys).
+- **File sink:** opt-in, **per-run file** at `log/<YYYYMMDDThhmmsssssZ>-<pid>.<ext>` (compact UTC +
+  pid, configurable `dir`/`path`), un-coloured, **append-streamed per record** (crash-durable).
+  `log/` gitignored.
 - **JSON format = JSON Lines** (one record per line, streamed) — *not* a single assembled array —
   so it keeps streaming durability. Reserve it now; **build it on first CI need**.
 - **Retention:** opt-in `retention: { maxFiles, maxAgeDays }`, pruned at startup, own-name-pattern
-  files only.
-- **`ssg init` / `add`:** built on `log` from day one (logger ships first).
+  files only. **No default cap** — nothing is deleted unless configured.
+- **`ssg init` / `add`:** built on `log` from day one (logger ships first); their output uses `log`.
 
-## Open questions
+## Before we start — things to lock first
 
-- **`logger` taxonomy + casing.** Lock the key as `logger` (lowercase)? And settle the value
-  vocabulary — is it the **file** (`carousel.build.js`, `generate-guides.js`), the **subsystem**
-  (`build`, `assets`, `collections`), or **both** (a `logger` + a finer `metadata.source`)? Auto-fill
-  covers most call sites; the engine's own internal logs need a convention.
-- **Filename collisions.** Two runs in the same millisecond → same name (near-impossible
-  interactively, possible for parallel CI). Accept it, or append a short pid/random suffix?
-- **`metadata` well-known keys.** Document `group`/`hint`/`count` as reserved (everything else
-  free-form), or keep it fully open? Matters once `jsonl` is consumed.
-- **Retention defaults.** Ship a default cap (e.g. `maxFiles: 50`) when the sink is on, or truly
-  nothing until configured? (Leaning: nothing — don't delete unless asked.)
-- **`level` for `log.debug`.** Confirm `DEBUG` joins the `SUCCESS/INFO/WARNING/ERROR` set (it's the
-  verbose-only tier).
+The **data model, config, file sink, and CLI are settled** — enough to start coding. The four items
+below are about *rendering and lifecycle*, not data; lock 1–3 before the **mass call-site migration**
+(they're cheap to decide, expensive to redo), and 4 falls out of the first prototype.
+
+1. **The CLI command owns the report lifecycle, not `build.js`.** `ssg build` does
+   `begin → build() → summary → exit`; `ssg test` does `begin → build() → checks() → tests() →
+   summary → exit` — **one report, one summary** spanning all phases. `build.js` only *logs*; it must
+   not call `summary()`/`exit` itself, or `test` can't compose. (Also: the logger needs a plain
+   **streaming mode** with no end-of-run flush for the long-lived **admin** server — grouping is a
+   bounded-run feature, errors always stream live.)
+2. **Test-suite strategy (the main risk).** `smoke.js` regex-matches exact strings and the always-on
+   checks scan stdout. Decide up front: **(a)** keep every message's *text* byte-identical (only the
+   chrome around it changes), **and (b)** add a **record-capture mode** so tests assert on structured
+   records, not formatted stdout. Migrate a phase, keep `npm test` green, repeat.
+3. **Verbosity mapping.** Pin which levels render per mode so the **default** still contains whatever
+   the tests grep: proposed — `quiet` = ERROR + summary; `normal` = phase headers + SUCCESS +
+   WARNING + ERROR + summary (no per-item lines); `verbose` = + INFO (per-item) + DEBUG + timings.
+4. **A console format mockup.** One concrete sketch of a phase header, a grouped warning
+   (count + hint), and the coloured summary — agree it before reformatting call sites. (Best produced
+   *with* the first prototype.)
+
+## Still genuinely open (not blockers)
+
+- `logger` value vocabulary — the exact coarse set (`engine`/`component`/`generator`/`page`/`test`?);
+  refine as call sites are migrated.
+- Datetime in **local vs UTC** for the *console* summary line (the record/filename are UTC-fixed).
+- A `--json` **console** mode (stdout as JSONL) for piping — distinct from the file sink; defer.
