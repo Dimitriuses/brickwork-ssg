@@ -105,7 +105,7 @@ JSON build log; this project builds quietly), it belongs in `config.json`. If it
 sense **for one run**, it's a flag and shouldn't clutter config.
 
 **The feature that actually justifies `config.json` (and that a flag serves poorly): a persistent
-file sink.** "Always tee a full/JSON log to `build.log`" is something you want committed and not
+file sink.** "Always tee a full/`jsonl` log to `log/`" is something you want committed and not
 retyped — and it's where your original **CI/CD** motivation really lands. A machine-readable log
 *file* declared once in config beats a wall of CLI flags on every CI invocation.
 
@@ -131,17 +131,50 @@ A single top-level **`log`** object, with shared keys plus optional per-command 
 }
 ```
 
-A file sink, when you want one:
+### The file sink
+
+**Opt-in** (off by default, so the zero-config build stays clean). When enabled it writes a fresh
+**per-run** file:
 
 ```jsonc
-"file": { "path": "build.log", "level": "verbose", "format": "text" }   // format: "text" | "json"
+"file": true                                            // on, with all defaults
+"file": { "level": "verbose", "format": "text" }        // on, tuned
+"file": { "dir": "log", "format": "jsonl" }             // change the folder / format
 ```
 
+- **Default location: a `log/` folder at the site root, named `<datetime>.<ext>`** — one file per
+  build, so there's no truncate-vs-append question and runs don't clobber each other. The folder and
+  filename are configurable (`dir` / `path`) in `config.json` or via `--log file=…` at startup.
 - The file is **always un-coloured** (ANSI stripped) and may run at a **higher level than the
   console** — e.g. console `normal` (just the summary on screen) while the file captures `verbose`.
-- `format: "json"` is the natural home for the deferred **machine-readable** mode: structured records
-  to disk for CI to ingest, while humans still get the pretty console output. Build it when a real CI
-  need shows up; the shape just falls out of the message records.
+- **`log/` is a build artifact → gitignore it** (like `build/`). Don't put it *inside* `build/`,
+  which is wiped each run. Files accumulate one-per-run; a retention cap ("keep last N") is a
+  plausible later option — defer it.
+- **Windows-safe `<datetime>`:** no colons (`:` is illegal in Windows filenames). Use e.g.
+  `2026-06-30_14-22-05` or `20260630T142205` — the dev box is Win10, so this matters.
+
+### File durability + the JSON question (your crash concern)
+
+Your worry is right *for one specific shape*: a log that **assembles one big JSON array/object and
+writes it at the end** loses everything if the process dies mid-build. The fix is to **not** use that
+shape.
+
+- **Stream the file, append-per-record.** Open the sink at startup and write each record the moment
+  it's logged — never buffer the file. A crash then leaves a **valid partial log** of everything up to
+  the failure. (The console reporter is the *only* buffered consumer — it holds records to group them
+  for readability; the file does not.) So architecturally the logger **fans each record out to
+  sinks**: console = buffer + group (pretty), file = append-stream (durable), and errors also echo to
+  the console live. Enabling a file sink is itself the mitigation for "lost output on a crash."
+- **For `format: "json"`, use JSON Lines (JSONL / NDJSON): one JSON object per line**, appended as
+  each record is emitted — *not* a single enclosing array. Each complete line is independently valid,
+  so JSONL keeps the streaming durability of the text sink while staying machine-readable. (A strict
+  single-array `.json` is the fragile form to avoid.) A final `summary` record can be the last line.
+- Net: text and `jsonl` sinks share the same append-per-record path and differ only in how a record
+  is rendered (human line vs JSON object). The file is **chronological** (good for reconstructing a
+  crash), while the console stays **grouped**.
+- Honest scoping: for a sub-second build, abrupt crashes are rare — but JSONL makes durability free,
+  so there's no reason to choose the fragile shape. Still, defer actually *building* the `jsonl`
+  format until a real CI consumer exists; just reserve the format name and the JSONL decision now.
 
 ### Resolution order (low → high)
 
@@ -153,16 +186,23 @@ A file sink, when you want one:
 
 ### The command-line override
 
-Keep the ergonomic shortcuts **`--quiet` / `--verbose` / `--no-color`** for the common cases. For the
-rest, a general **`--log`** flag (your placeholder name) mirrors the config fields for one run, e.g.:
+**Decided: a general `--log key=value` flag**, where **multiple pairs** are accepted — both
+**repeated** and **comma-joined**:
 
 ```bash
-ssg build --log level=verbose,file=run.log,format=json
-ssg build --quiet                 # shorthand for --log level=quiet
+ssg build --log level=verbose --log file=true        # repeated
+ssg build --log level=verbose,color=never            # comma-joined in one flag
+ssg build --log file=true,format=jsonl
 ```
 
-Discrete `--log-level` / `--log-file` / `--log-color` are the discoverable alternative; the exact
-flag spelling is still open. Whatever the form, it sets the **top layer** of the resolution above.
+Each pair maps to a `log.*` field (`level`, `color`, `file`, `format`, `dir`, …) and sets the **top
+layer** of the resolution above (this run only). Keep the ergonomic shortcuts **`--quiet` /
+`--verbose` / `--no-color`** as aliases (`--quiet` ≡ `--log level=quiet`). Parsing is trivial: split
+repeats, split on `,`, split each on the first `=`; an unknown key is a friendly error, not a crash.
+
+> Boolean-ish values: `file=true`/`file=false` toggles the default-path sink; `file=<path>` sets an
+> explicit path. Keep the value grammar small (strings, `true`/`false`) — no nested objects on the
+> CLI; reach for `config.json` when it gets richer.
 
 ### `ssg test`
 
@@ -197,7 +237,8 @@ case stays a single `level`.
    CLI flags (`--quiet` / `--verbose` / `--no-color` / `--log …`) — the order in
    [Configuration](#configuration-configjson--flags).
 4. Route `ssg test` (`ok`/`FAIL`, `N passed/M failed`) and the admin server through the same module.
-5. Add the file sink (`log.file`) — un-coloured `text`; leave `json` until a CI need lands.
+5. Add the file sink (`log.file`) — append-streamed, un-coloured `text` to `log/<datetime>.log`;
+   leave `jsonl` until a CI need lands.
 6. Optionally expose a scoped logger to build scripts (see below).
 
 **Keep message text stable** during the move so the test suite keeps matching (see caveats).
@@ -234,8 +275,8 @@ case stays a single `level`.
 - **Scope discipline.** Config is in scope, but keep the `log` block **small and optional** — a
   level, a colour policy, an optional file sink. Resist a general logging framework (transports,
   arbitrary sinks, pluggable formatters). Builds are sub-second; favour a ~100-line module over
-  cleverness. The `json` file format is the *one* sanctioned structured output — build it when a real
-  CI need lands, not before.
+  cleverness. `jsonl` is the *one* sanctioned structured output — build it when a real CI need lands,
+  not before.
 - **Config/flag drift.** Two places to set the same thing (config + flags) can confuse — keep the
   field names identical across `config.json`, `--log key=value`, and the record, and document the
   one resolution order so "why is it verbose?" has a single answer.
@@ -246,18 +287,26 @@ case stays a single `level`.
 
 - **Module/method names:** `log` — `log.success/info/warn/error/debug`.
 - **Grouping:** by `level` (severity) + `phase`.
-- **Phase:** passed per call; `config.json` may optionally re-level/mute phases (deferred).
+- **Phase:** passed per call. `log.phases` (per-phase mute/re-level) is **deferred**.
 - **`ssg test`:** shares the one logger instance, separated by `phase` tag + tunable via `log.test`.
 - **Config + flags:** both, layered (defaults → `config.json` `log[.command]` → env → CLI), all
-  optional. A single top-level `log` object with optional `build`/`test` overrides; a `file` sink for
-  the CI/persistent case.
+  optional. A single top-level `log` object with optional `build`/`test` overrides.
+- **CLI override:** `--log key=value`, **multiple pairs** (repeated and/or comma-joined); `--quiet`/
+  `--verbose`/`--no-color` are aliases.
+- **File sink:** opt-in, **per-run file** at `log/<datetime>.<ext>` (configurable `dir`/`path`),
+  un-coloured, **append-streamed per record** (crash-durable). `log/` is gitignored.
+- **JSON format = JSON Lines** (one record per line, streamed) — *not* a single assembled array —
+  so it keeps streaming durability. Reserve the format name now; **build it on first CI need**.
 
 ## Open questions
 
-- CLI flag spelling for the general override: `--log key=value,…` vs discrete `--log-level` /
-  `--log-file` / `--log-color` (keep `--quiet`/`--verbose`/`--no-color` either way).
-- `log.phases` (per-phase mute/re-level) — needed in v1, or deferred until something is too noisy?
-- `json` file format — define the record schema now (so it's stable) or when the first CI consumer
-  appears?
-- Log-file lifecycle: truncate per build vs append; relative-to-site path; should `build/` ever hold
-  it (no — it's wiped each build), so default somewhere like the site root or a `logs/` dir.
+- **Record schema** (shared by `jsonl` + the in-memory record): the field set is mostly settled
+  (`level`, `phase`, `message`, `group?`, `hint?`, `count`) — do we also stamp `time` and a numeric
+  `seq`, and allow a free-form `details` object for structured extras (your "details nested in the
+  tree")? Pin this before the first `jsonl` consumer so the schema is stable.
+- **Datetime format** for the filename — `2026-06-30_14-22-05` vs compact `20260630T142205` (both
+  colon-free for Windows); and is it local time or UTC?
+- **Log retention** — none for now (files accumulate); add a "keep last N" cap later, or leave it to
+  the user + `.gitignore`?
+- **`ssg init` / `add` output** — do those commands run through `log` from day one, or stay simple
+  `console.log` until the module lands?
