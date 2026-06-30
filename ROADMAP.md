@@ -124,6 +124,10 @@ it needs a window-based generation model (below) and is a large task in its own 
   generators to populate from source — so `product.json` stops shipping to `build/`.
 
 ### Tooling & distribution
+> Expanded into a detail draft: [docs/tooling-and-distribution-plan.md](docs/tooling-and-distribution-plan.md)
+> (deploy/slim-core, `ssg init`, plugins/registry, and the terminal-UX overhaul incl. a traffic-light
+> colour system).
+
 - **Material *deploy* commands & a slim core** — `ssg add component <name>` (and
   generators/tests) scaffolds a material into a site from a catalog, **and the engine stops
   shipping example/default materials that every site silently inherits**. This fixes three
