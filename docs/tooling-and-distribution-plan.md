@@ -104,6 +104,9 @@ catalog.
 
 ## 4. Build/test output overhaul (terminal UX) — incl. colour
 
+> Deeper design (the custom output-module approach): [terminal-ux-plan.md](terminal-ux-plan.md).
+> This section stays the roadmap-level summary.
+
 The most self-contained item, and the one with the clearest payoff. Today's output works but reads
 flat.
 
