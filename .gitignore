@@ -2,6 +2,10 @@
 build/
 example/build/
 
+# Log output (per-run files from the planned file sink; see docs/terminal-ux-plan.md)
+log/
+example/log/
+
 # Node modules
 node_modules/
 

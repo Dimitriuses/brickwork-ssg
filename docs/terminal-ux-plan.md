@@ -51,17 +51,36 @@ log.summary();          // verdict line + counts, coloured by worst severity
 process.exit(log.errorCount ? 1 : 0);
 ```
 
-**Message record.** Each call appends a structured record, not a string:
+**The record.** Each call appends a structured record, not a string — and that record *is* the
+`jsonl` line (one shape, rendered two ways: pretty for the console, verbatim for the file). The
+schema (decided):
 
-```js
-{ level: 'warn', message: '…', phase: 'collections', group: 'products', hint: '…', count: 1 }
+```jsonc
+{
+  "timestamp": "2026-06-30T14:22:05.123Z",  // UTC, ISO 8601 + ms — exactly Node's Date.toISOString()
+  "phase":     "collections",               // build | test | collections | templates | assets | … (extensible)
+  "level":     "WARNING",                   // SUCCESS | INFO | WARNING | ERROR | DEBUG | … (extensible)
+  "logger":    "build.js",                  // who emitted it (provenance) — see below
+  "message":   "no `copy` — files will not ship",
+  "metadata":  { "group": "products",
+                 "hint":  "set copy:true to ship or copy:false to silence",
+                 "count": 1 }               // + any producer-specific extras
+}
 ```
 
-The second arg is the **"parameters"** you described: the context the reporter sorts/groups by.
-**Decided: group by `level` (severity) + `phase`.** `phase` is **passed per call** (the producer
-knows its phase; the logger doesn't track a hidden "current phase"). `group` (an optional finer key,
-e.g. the collection or component name) and `hint`/action ride along for rendering and de-duplication
-— repeats of the same message bump `count` (generalising `flushDeferredWarnings`).
+- **Grouping is by `level` + `phase`** (decided). `metadata.group` is the optional finer key (a
+  collection/component name); `metadata.hint` is the action text; `metadata.count` collapses repeats
+  (generalising `flushDeferredWarnings`); anything else a producer wants rides in `metadata`.
+- **`phase` is passed per call** — the producer knows its phase; the logger tracks no hidden
+  "current phase".
+- **`logger` = provenance**: which subsystem/file emitted the line (`build.js`, `assets`,
+  `<component>.build.js`, `<generator>.js`, `check()`, …). Mostly **auto-filled, not hand-typed** —
+  the scoped logger handed to a build script/generator pre-binds `logger` (and usually `phase`), so a
+  component just calls `log.warn(msg, { hint })` and the record gets `logger: "carousel.build.js"`
+  for free. `phase` answers *when*, `logger` answers *who* — orthogonal, both useful.
+
+> Two small casing calls (flagged, not yet locked): JSON keys read best all-lowercase, so I've
+> written **`logger`** (you wrote `Logger`); `level` **values** stay UPPERCASE as you specified.
 
 ## Collect → sort → display
 
@@ -139,19 +158,35 @@ A single top-level **`log`** object, with shared keys plus optional per-command 
 ```jsonc
 "file": true                                            // on, with all defaults
 "file": { "level": "verbose", "format": "text" }        // on, tuned
-"file": { "dir": "log", "format": "jsonl" }             // change the folder / format
+"file": { "dir": "log", "format": "jsonl",              // change folder / format
+          "retention": { "maxFiles": 50, "maxAgeDays": 30 } }
 ```
 
 - **Default location: a `log/` folder at the site root, named `<datetime>.<ext>`** — one file per
-  build, so there's no truncate-vs-append question and runs don't clobber each other. The folder and
-  filename are configurable (`dir` / `path`) in `config.json` or via `--log file=…` at startup.
+  build, so there's no truncate-vs-append question and runs don't clobber each other. Folder/filename
+  configurable (`dir` / `path`) in `config.json` or via `--log file=…`.
+- **Filename = compact UTC timestamp** (decided): `<YYYYMMDDThhmmsssssZ>.<ext>`, e.g.
+  `20260630T142205123Z.jsonl`. It's `Date.toISOString()` with the separators stripped
+  (`.replace(/[-:.]/g,'')`) — colon-free, so Windows-safe, and sorts chronologically by name.
 - The file is **always un-coloured** (ANSI stripped) and may run at a **higher level than the
-  console** — e.g. console `normal` (just the summary on screen) while the file captures `verbose`.
-- **`log/` is a build artifact → gitignore it** (like `build/`). Don't put it *inside* `build/`,
-  which is wiped each run. Files accumulate one-per-run; a retention cap ("keep last N") is a
-  plausible later option — defer it.
-- **Windows-safe `<datetime>`:** no colons (`:` is illegal in Windows filenames). Use e.g.
-  `2026-06-30_14-22-05` or `20260630T142205` — the dev box is Win10, so this matters.
+  console** — e.g. console `normal` (summary only on screen) while the file captures `verbose`.
+- **`log/` is a build artifact → gitignored** (added to the engine `.gitignore`; sites that adopt
+  the file sink add it too). Don't put it *inside* `build/`, which is wiped each run.
+
+**Retention (decided: configurable deletion).** Off unless set — never delete a user's files
+silently. When `retention` is present, prune the `log/` dir on each run:
+
+```jsonc
+"retention": { "maxFiles": 50, "maxAgeDays": 30 }   // delete oldest beyond 50, and/or older than 30 days
+```
+
+- Either rule alone, or both (delete a file that violates *either*). `maxFiles` keeps the newest N;
+  `maxAgeDays` drops anything older than N days.
+- **Safety: only ever delete files matching the engine's own name pattern**
+  (`^\d{8}T\d{9}Z\.(log|jsonl)$`) — a stray file a user dropped in `log/` is never touched.
+- **When:** prune at **startup**, before opening the new run's file (so a crash never skips the next
+  prune, and the just-written file isn't a candidate). Deletion is destructive, so keep it
+  conservative: own-pattern only, opt-in, log what it removed at `debug`.
 
 ### File durability + the JSON question (your crash concern)
 
@@ -249,13 +284,14 @@ case stays a single `level`.
   machinery, not content. Good litmus test for "what is core": the build can't narrate itself
   without it.
 - **Plugins / build scripts (task 3).** Extend the build-script helpers (4th arg) with a **scoped
-  logger** — e.g. `helpers.warn(msg, { hint })` that auto-tags `group: <componentName>`. Then a
-  material reports *through* the system (attributed + grouped) instead of `console.log`, which also
-  gives third-party materials a sanctioned, well-behaved output channel (ties into the trust
-  boundary). Additive and backward-compatible — existing scripts that `console.log` still work; we'd
-  migrate the engine's own scripts first.
-- **`ssg init` (task 2).** No direct dependency, but `init`/`add` are exactly the commands that
-  benefit from clear success/next-step messaging — another reason to build the module before them.
+  logger** — e.g. `helpers.warn(msg, { hint })` that **pre-binds `logger: "<component>.build.js"`**
+  (and the current `phase`) so the record's provenance fills itself in. A material then reports
+  *through* the system (attributed + grouped) instead of `console.log` — a sanctioned, well-behaved
+  output channel for third-party materials (ties into the trust boundary). Additive and
+  backward-compatible: existing scripts that `console.log` still work; migrate the engine's own first.
+- **`ssg init` / `add` (task 2).** Because the logger ships **first**, `init`/`add` are built on it
+  from day one — their output (scaffold steps, next-step hints, success lines) **must use `log`**, not
+  raw `console.log`. They're a good proving ground for `success`/next-step messaging.
 
 ## Caveats / watch-items
 
@@ -293,20 +329,29 @@ case stays a single `level`.
   optional. A single top-level `log` object with optional `build`/`test` overrides.
 - **CLI override:** `--log key=value`, **multiple pairs** (repeated and/or comma-joined); `--quiet`/
   `--verbose`/`--no-color` are aliases.
-- **File sink:** opt-in, **per-run file** at `log/<datetime>.<ext>` (configurable `dir`/`path`),
-  un-coloured, **append-streamed per record** (crash-durable). `log/` is gitignored.
+- **Record schema:** `{ timestamp (UTC ISO+ms), phase, level (UPPERCASE), logger, message, metadata{
+  group, hint, count, … } }` — the in-memory record *is* the `jsonl` line. `logger` is provenance,
+  auto-filled by scoped loggers.
+- **File sink:** opt-in, **per-run file** at `log/<YYYYMMDDThhmmsssssZ>.<ext>` (compact UTC,
+  configurable `dir`/`path`), un-coloured, **append-streamed per record** (crash-durable). `log/`
+  gitignored.
 - **JSON format = JSON Lines** (one record per line, streamed) — *not* a single assembled array —
-  so it keeps streaming durability. Reserve the format name now; **build it on first CI need**.
+  so it keeps streaming durability. Reserve it now; **build it on first CI need**.
+- **Retention:** opt-in `retention: { maxFiles, maxAgeDays }`, pruned at startup, own-name-pattern
+  files only.
+- **`ssg init` / `add`:** built on `log` from day one (logger ships first).
 
 ## Open questions
 
-- **Record schema** (shared by `jsonl` + the in-memory record): the field set is mostly settled
-  (`level`, `phase`, `message`, `group?`, `hint?`, `count`) — do we also stamp `time` and a numeric
-  `seq`, and allow a free-form `details` object for structured extras (your "details nested in the
-  tree")? Pin this before the first `jsonl` consumer so the schema is stable.
-- **Datetime format** for the filename — `2026-06-30_14-22-05` vs compact `20260630T142205` (both
-  colon-free for Windows); and is it local time or UTC?
-- **Log retention** — none for now (files accumulate); add a "keep last N" cap later, or leave it to
-  the user + `.gitignore`?
-- **`ssg init` / `add` output** — do those commands run through `log` from day one, or stay simple
-  `console.log` until the module lands?
+- **`logger` taxonomy + casing.** Lock the key as `logger` (lowercase)? And settle the value
+  vocabulary — is it the **file** (`carousel.build.js`, `generate-guides.js`), the **subsystem**
+  (`build`, `assets`, `collections`), or **both** (a `logger` + a finer `metadata.source`)? Auto-fill
+  covers most call sites; the engine's own internal logs need a convention.
+- **Filename collisions.** Two runs in the same millisecond → same name (near-impossible
+  interactively, possible for parallel CI). Accept it, or append a short pid/random suffix?
+- **`metadata` well-known keys.** Document `group`/`hint`/`count` as reserved (everything else
+  free-form), or keep it fully open? Matters once `jsonl` is consumed.
+- **Retention defaults.** Ship a default cap (e.g. `maxFiles: 50`) when the sink is on, or truly
+  nothing until configured? (Leaning: nothing — don't delete unless asked.)
+- **`level` for `log.debug`.** Confirm `DEBUG` joins the `SUCCESS/INFO/WARNING/ERROR` set (it's the
+  verbose-only tier).
