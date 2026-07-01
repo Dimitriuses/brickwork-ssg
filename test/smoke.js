@@ -379,4 +379,52 @@ const quietOut = execSync('node cli.js build --site example --quiet', { cwd: roo
 check('flags: --quiet hides narration, keeps the summary',
   !/\[COLLECTIONS\]/.test(quietOut) && /Build completed successfully/.test(quietOut));
 
+// --- file sink + retention (log commit 8) ---
+check('log-config: file from config (object) + CLI format=jsonl', (() => {
+  const o = resolveLogOptions({ log: { file: { dir: 'log' } } }, 'build', ['--log', 'file=true,format=jsonl']);
+  return o.file && o.file.dir === 'log' && o.file.format === 'jsonl';
+})());
+check('log-config: --log file=false disables the sink', (() => {
+  return resolveLogOptions({ log: { file: true } }, 'build', ['--log', 'file=false']).file === false;
+})());
+
+const os = require('os');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwlog-'));
+try {
+  // text sink: capture mode -> file only, no console noise.
+  const lgf = createLogger();
+  lgf.configure({ color: 'never', capture: true, file: { dir: path.join(tmp, 'log'), format: 'text' } });
+  lgf.info('hello narrate', { phase: 'x' });
+  lgf.warn('careful', { phase: 'x', hint: 'do y' });
+  lgf.error('boom', { phase: 'x' });
+  const textContent = fs.readFileSync(lgf.filePath, 'utf8');
+  check('file sink: per-run <stamp>-<pid>.log, records appended (text)',
+    /^\d{8}T\d{9}Z-\d+\.log$/.test(path.basename(lgf.filePath)) &&
+    /INFO\s+hello narrate/.test(textContent) && /WARNING\s+careful/.test(textContent) &&
+    /ERROR\s+boom/.test(textContent));
+
+  // jsonl sink: one JSON record per line (streaming-durable).
+  const lgj = createLogger();
+  lgj.configure({ capture: true, file: { dir: path.join(tmp, 'jlog'), format: 'jsonl' } });
+  lgj.warn('w', { phase: 'p', hint: 'h' });
+  const firstLine = JSON.parse(fs.readFileSync(lgj.filePath, 'utf8').trim().split('\n')[0]);
+  check('file sink: jsonl one record per line',
+    /\.jsonl$/.test(lgj.filePath) && firstLine.level === 'WARNING' &&
+    firstLine.phase === 'p' && firstLine.metadata.hint === 'h');
+
+  // retention: keep newest N own-pattern files, delete older; never touch foreign files.
+  const rdir = path.join(tmp, 'ret');
+  fs.mkdirSync(rdir, { recursive: true });
+  ['20260101T000000000Z-1.log', '20260102T000000000Z-1.log', '20260103T000000000Z-1.log',
+    '20260104T000000000Z-1.log', '20260105T000000000Z-1.log'].forEach(f => fs.writeFileSync(path.join(rdir, f), 'x'));
+  fs.writeFileSync(path.join(rdir, 'keepme.txt'), 'x');
+  createLogger().configure({ capture: true, file: { dir: rdir, retention: { maxFiles: 2 } } });
+  const after = fs.readdirSync(rdir);
+  check('file sink: retention maxFiles prunes oldest own-pattern, keeps foreign',
+    after.includes('20260104T000000000Z-1.log') && after.includes('20260105T000000000Z-1.log') &&
+    !after.includes('20260101T000000000Z-1.log') && after.includes('keepme.txt'));
+} finally {
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
