@@ -142,11 +142,14 @@ it needs a window-based generation model (below) and is a large task in its own 
 - **npm-distributed third-party plugins/themes + a material registry** — third-party/shared
   distribution (e.g. a community "materials" project people add to), once the deploy model
   is proven.
-- **Build/test output overhaul (terminal UX)** — a broader pass over the CLI's build/test output,
-  beyond the v0.4 grouped warnings (repeat-count + action text). Make errors/warnings/summaries read
-  as clear guidance — consistent prefixes + severity, per-phase grouping, quiet/verbose levels — so
-  the output is signal, not noise. (Split out of the [material-indexing plan](docs/material-indexing-plan.md)
-  as a separate follow-up.)
+- **✅ Done (v0.5.0–v0.5.1) — Build/test output overhaul (terminal UX)**: a zero-dependency output
+  module (`lib/log.js` + `lib/colors.js`) all build/test output flows through — traffic-light colour,
+  verbosity levels (`--quiet`/`--verbose`), a `config.json` `log` block + `--log key=value` flags, an
+  append-streamed `text`/`jsonl` file sink with retention, coloured `ssg test`, and a scoped
+  `helpers.log` for component build scripts. Both sites migrated. Follow-ups (`--json` console,
+  `log.phases`, admin/watch + generator logging) tracked in the tooling draft §4. See
+  [docs/terminal-ux-plan.md](docs/terminal-ux-plan.md) and
+  [docs/tooling-and-distribution-plan.md](docs/tooling-and-distribution-plan.md).
 
 ### Pages & assets
 - **Selectable pagination modes** — **single-page** (client-side, all cards rendered;

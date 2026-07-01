@@ -1,9 +1,9 @@
 # Tooling & distribution — draft plan (for discussion)
 
 > **Status: draft.** Expands the **Tooling & distribution** section of [ROADMAP.md](../ROADMAP.md)
-> into per-item detail, proposes sequencing, and records open questions. Nothing here is decided —
-> it's a starting point to argue with. The four items are largely independent; the **terminal-UX
-> overhaul** (incl. colour) is the smallest and can land first.
+> into per-item detail, proposes sequencing, and records open questions. **Item 4 (terminal UX)
+> shipped in v0.5.0–v0.5.1** (both sites migrated); items 1–3 (deploy/slim-core, `ssg init`,
+> plugins) remain — a starting point to argue with.
 
 ## The pieces (from the roadmap)
 
@@ -14,11 +14,12 @@
    `config.json`/`pages/`), so a fresh project isn't empty once the core is slim.
 3. **npm-distributed third-party plugins/themes + a material registry** — shared distribution once
    the deploy model is proven.
-4. **Build/test output overhaul (terminal UX)** — a broader pass over the CLI's build/test output,
-   beyond the v0.4 grouped warnings, **including colour (a traffic-light system)**.
+4. **Build/test output overhaul (terminal UX)** — ✅ **done (v0.5.0–v0.5.1):** one output module,
+   traffic-light colour, verbosity levels, `config.json`/flags, a file sink, and scoped build-script
+   logging. See §4.
 
-Recommended overall order: **4 → 1 → 2 → 3.** (4) is self-contained and a quick polish win; (1) is
-the big structural change and the prerequisite for (2) and (3).
+Recommended order for what's left: **1 → 2 → 3** (item 4 shipped first, as planned). (1) is the big
+structural change and the prerequisite for (2) and (3).
 
 ---
 
@@ -102,81 +103,40 @@ catalog.
 
 ---
 
-## 4. Build/test output overhaul (terminal UX) — incl. colour
+## 4. Build/test output overhaul (terminal UX) — ✅ shipped (v0.5.0–v0.5.1)
 
-> Deeper design (the custom output-module approach): [terminal-ux-plan.md](terminal-ux-plan.md).
-> This section stays the roadmap-level summary.
+**Done.** A zero-dependency output system — `lib/log.js` + `lib/colors.js` — that all build/test
+output flows through:
 
-The most self-contained item, and the one with the clearest payoff. Today's output works but reads
-flat.
+- **Traffic-light colour** (🟢 success / 🟡 warning / 🔴 error, dim for narration) with one-time
+  TTY + `NO_COLOR`/`FORCE_COLOR` detection; plain/byte-identical when off (piped/CI).
+- **Structured records** (`timestamp/phase/level/logger/message/metadata`), warnings deferred +
+  de-duplicated, a summary coloured by outcome.
+- **Verbosity levels** (`--quiet` / `--verbose`) via a single editable `{ category → minLevel }`
+  table (per-item lines are verbose-only), plus a `config.json` `log` block and `--log key=value`
+  flags resolved defaults → config → env → CLI.
+- **File sink** — opt-in, append-streamed per record (crash-durable), `text` or **`jsonl`**, per-run
+  `log/<stamp>-<pid>.<ext>`, own level, with `retention: { maxFiles, maxAgeDays }`.
+- **`ssg test`** shares the palette; a **scoped `helpers.log`** gives component build scripts their
+  own provenance-tagged logger (so `--quiet` is truly silent). Both sites migrated at v0.5.1.
 
-**Where we are.**
-- Bracketed `[TAG]` prefixes that **mix two axes**: *phase* (`[BUILD]`, `[TEMPLATE]`, `[MODEL]`,
-  `[PAGES]`, `[COLLECTIONS]`) and *severity* (`[WARNING]`, `[ERROR]`). `ssg test` prints `ok` /
-  `FAIL` and an `N passed, M failed` line.
-- `console.log` for most lines, `console.error` for errors; **no `console.warn`**.
-- v0.4 added `deferWarning` / `flushDeferredWarnings` — warnings are de-duplicated, counted, and
-  **flushed grouped at the end** with action text, instead of scattered through the run.
-- **No colour anywhere**, and the engine is **zero-runtime-dependency**, so any colour must be raw
-  ANSI — *not* chalk.
+Full design, decisions, and as-built notes: **[terminal-ux-plan.md](terminal-ux-plan.md)**.
 
-**Goal.** Output reads as guidance, not noise: a clear severity model, grouped by phase, with a
-summary whose colour tells you the outcome at a glance.
-
-### 4a. Colour — the traffic-light system (the headline idea)
-
-A simple, three-colour severity scale, applied consistently across build and test:
-
-| Severity | Colour | Used for |
-|---|---|---|
-| **success** | 🟢 green | build completed, `N pages built`, all checks `ok`, `N passed` |
-| **warning** | 🟡 amber (yellow/orange) | deferred warnings — omitted `copy`/`required`/`type`, missing images, a `map` miss, no-`data_model` collection |
-| **error** | 🔴 red | build-failing problems — bad glob, required-but-missing, unknown generator, name collision, broken links, `M failed` |
-
-Plus a **neutral/dim** tone for phase headers and per-item chatter (`[BUILD] foo.html`), so colour
-is reserved for things that carry a verdict.
-
-**Implementation (zero-dependency).**
-- A tiny `lib/colors.js`: raw ANSI codes (`\x1b[32m` green, `\x1b[33m` yellow, `\x1b[31m` red,
-  `\x1b[2m` dim, `\x1b[0m` reset) behind helpers — `green(s)`, `warn(s)`, `error(s)`, `dim(s)` — or
-  a single `paint(severity, text)`. **No chalk.**
-- **Enablement / detection**, decided once at startup:
-  - On when `process.stdout.isTTY` (errors keyed off `stderr.isTTY`).
-  - Honour **`NO_COLOR`** (any value ⇒ off — the de-facto standard) and a **`--no-color`** flag.
-  - Honour **`FORCE_COLOR`** (force on, e.g. for CI logs that do render ANSI).
-  - When disabled, the helpers return the string unchanged — every line goes through them, so plain
-    output is identical to today's, just uncoloured.
-- **Layering on what exists**: colour the *severity*, keep the *phase* tag dim. The natural seams
-  are already there — the `[WARNING]`/`[ERROR]` prefixes, the `flushDeferredWarnings` block, and the
-  `ok`/`FAIL`/summary lines in `ssg test`. Route those few sinks through the helpers and most of the
-  win lands with little churn.
-
-This colour pass is a good **standalone first commit**: small, no API surface, reversible, and it
-makes the existing grouped warnings legible.
-
-### 4b. The rest of the overhaul (beyond colour)
-
-- **Split phase vs severity.** Stop overloading `[TAG]`: a dim phase label (`build`, `template`,
-  `checks`) + a coloured severity glyph/word. One format helper so every line is consistent.
-- **Per-phase grouping + a verdict summary.** Sections in order (collections → pages → templates →
-  checks), then a final summary line **coloured by the worst severity seen**: green "built N pages,
-  0 warnings", amber "… N warnings", red "build FAILED: M errors". (We already flush warnings + a
-  summary at the end — this formalises it.)
-- **Quiet / verbose levels.** `--quiet` (errors + final summary only), default (phase headers +
-  grouped warnings + summary), `--verbose` (per-item `[BUILD]` lines, timings). Keeps default output
-  scannable without losing detail on demand.
-- **Apply to `ssg test` too.** Green `ok` / red `FAIL`, amber for skipped, and a summary coloured by
-  outcome — same helpers, same rules.
-
-**Sequencing within (4).** 4a (colour) ships first and alone; 4b (levels, phase/severity split) can
-follow incrementally. None of it depends on (1)–(3).
+**Remaining (deferred — each waits on its own trigger):**
+- **`--json` console mode** — stdout as JSONL for piping, distinct from the file sink. On demand.
+- **`log.phases`** — per-phase mute/re-level, when one phase gets too noisy to leave at a single level.
+- **admin / watch logging** — route the admin server (and a future *watch* / rebuild-on-save mode)
+  through the logger; needs the plain **streaming** path (no bounded-run flush). Lands with the watch
+  task.
+- **Generator-scoped logger** — extend `helpers.log`'s equivalent to generators (`ctx.log`), so a
+  custom generator reports through the system too. When a generator needs to log.
 
 ---
 
 ## Open cross-cutting questions
 
-- **Colour scope creep.** Keep it to the three-light scale + dim. Resist per-phase palettes; the
-  point is a verdict at a glance, not a rainbow.
+- **Colour scope (settled).** Shipped as the three-light scale + dim — no per-phase palettes; a
+  verdict at a glance, not a rainbow. Keep it that way.
 - **Slim-core timing.** Carving defaults into a catalog (1) is a breaking change for any site that
   relied on inheritance — it pairs with a major version and a migration note, like the v0.4 retire
   of `generate-detail.js`.

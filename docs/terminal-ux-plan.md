@@ -1,11 +1,11 @@
-# Terminal output system — draft plan (for discussion)
+# Terminal output system — design + as-built notes
 
-> **Status: draft.** A deeper design for the **"Build/test output overhaul (terminal UX)"** roadmap
-> item — the custom output module idea. Builds on
-> [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §4 (the traffic-light colour
-> system) and generalises the v0.4 `deferWarning` / `flushDeferredWarnings` grouping. Nothing here is
-> decided. The headline is: **route all CLI output through one small module** instead of scattered
-> `console.log`.
+> **Status: shipped (v0.5.0–v0.5.1).** The design and decisions behind the **"Build/test output
+> overhaul (terminal UX)"** — a custom output module all CLI output flows through, replacing scattered
+> `console.log`. Built on [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §4 and
+> generalising the v0.4 `deferWarning` grouping. Kept as the record of *why* it's built this way; the
+> "Decided" / "Implementation plan" sections below are annotated with what actually shipped. Remaining
+> follow-ups are tracked in the tooling draft §4.
 
 ## The idea
 
@@ -437,12 +437,12 @@ then 4 migrates the rest. Build on a branch (e.g. `feat/log`).
   own `*.build.js` (e.g. `products.build.js`'s `[PRODUCTS]` lines). Additive; sites adopt when they
   re-sync.
 
-### Deferred (own trigger)
-- **`--json` console mode** and **`log.phases`** — when a need appears. (`jsonl` *file* format shipped
-  in commit 8; the console still renders human output.)
-- **admin/watch** logging — with the watch task. (Scoped `helpers.log` shipped in commit 9; sites
-  adopt it when they re-sync their component copies.)
+### Deferred → tracked in the roadmap
+The remaining follow-ups — **`--json` console mode**, **`log.phases`**, **admin/watch logging**, and a
+**generator-scoped logger** — moved to
+[tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §4 (each waits on its own
+trigger). Shipped along the way: the `jsonl` *file* format (commit 8) and the scoped `helpers.log`
+for component build scripts (commit 9).
 
-**Release.** This is additive + backward-compatible (no data-model or output-*text* change), so it
-can ship as a **minor** (v0.5.0). Commits 1–8 are done on `feat/log`; the scoped logger + deferred
-items follow independently.
+**Release.** Additive + backward-compatible (no data-model or output-*text* change). Shipped as
+**v0.5.0** (commits 1–8) and **v0.5.1** (commit 9, scoped logger); both sites now run v0.5.1.
