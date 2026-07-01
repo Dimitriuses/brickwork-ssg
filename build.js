@@ -109,7 +109,7 @@ function siteComponentRegistry() {
     try {
       _siteRegistry = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
     } catch (error) {
-      console.log('  [WARNING] Failed to parse components/registry.json:', error.message);
+      log.warn(`Failed to parse components/registry.json: ${error.message}`, { phase: 'components' });
     }
   }
   return _siteRegistry;
@@ -160,7 +160,7 @@ function readComponentConfig(name) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch (error) {
-    console.log(`  [WARNING] Failed to parse ${name}.json:`, error.message);
+    log.warn(`Failed to parse ${name}.json: ${error.message}`, { phase: 'components', logger: name });
     return { dependencies: [] };
   }
 }
@@ -233,7 +233,7 @@ function replaceVariables(template, vars) {
 function buildComponent(componentName, vars = {}, buildStack = []) {
   // Recursion protection - check if this component is already being built
   if (buildStack.includes(componentName)) {
-    console.log(`  [WARNING] Circular dependency detected: ${buildStack.join(' -> ')} -> ${componentName}`);
+    log.warn(`Circular dependency detected: ${buildStack.join(' -> ')} -> ${componentName}`, { phase: 'components', logger: componentName });
     return `<!-- Circular dependency: ${componentName} -->`;
   }
   
@@ -290,7 +290,7 @@ function buildPage(pageConfig, pageName) {
 
   // Loud build-time check: a page name must be produced only once.
   if (builtPageNames.has(pageData.page)) {
-    console.error(`[ERROR] page name collision: "${pageData.page}.html" is produced more than once`);
+    log.error(`page name collision: "${pageData.page}.html" is produced more than once`, { phase: 'pages' });
     buildErrors++;
   }
   builtPageNames.add(pageData.page);
@@ -322,12 +322,12 @@ function buildPage(pageConfig, pageName) {
     const autoContentPath = path.join(pageDir, `${pageData.page}.html`);
     if (fs.existsSync(autoContentPath)) {
       contentHtml = fs.readFileSync(autoContentPath, 'utf8');
-      console.log(`  [CONTENT] Auto-loaded from ${pageData.page}.html`);
+      log.debug(`  [CONTENT] Auto-loaded from ${pageData.page}.html`, { phase: 'pages' });
     }
   }
   
   if (pageData.components && pageData.components.length > 0) {
-    console.log(`  [COMPONENTS] Building ${pageData.components.length} component(s)`);
+    log.debug(`  [COMPONENTS] Building ${pageData.components.length} component(s)`, { phase: 'pages' });
     
     pageData.components.forEach(comp => {
       const componentHtml = buildComponent(comp.name, comp.vars || {});
@@ -370,7 +370,7 @@ function buildPage(pageConfig, pageName) {
     try {
       return buildComponent(name, flatConfig);
     } catch (error) {
-      console.log(`  [WARNING] Could not resolve {{COMPONENT:${name}}} in content:`, error.message);
+      log.warn(`Could not resolve {{COMPONENT:${name}}} in content: ${error.message}`, { phase: 'pages', logger: name });
       return match;
     }
   });
@@ -416,7 +416,7 @@ function buildPage(pageConfig, pageName) {
   const outputFile = path.join(BUILD_DIR, `${pageData.page}.html`);
   fs.writeFileSync(outputFile, finalHtml);
   
-  console.log(`[BUILD] ${pageData.page}.html - "${pageData.title}"`);
+  log.debug(`[BUILD] ${pageData.page}.html - "${pageData.title}"`, { phase: 'pages' });
 }
 
 // Resolve a single `map` value against a resolved collection item: a `$`-prefixed string is a
@@ -474,7 +474,7 @@ function validateMapPaths(map, partNames, label) {
 function expandTemplatePage(templateFile, templateConfig) {
   const opts = templateConfig.generatorOptions || {};
   const label = path.basename(templateFile);
-  const fail = (message) => { console.error(`[ERROR] Template ${label}: ${message}`); buildErrors++; return 0; };
+  const fail = (message) => { log.error(`Template ${label}: ${message}`, { phase: 'templates' }); buildErrors++; return 0; };
 
   // Validate generatorOptions (loud, build-failing). `generator` is optional: without it the
   // engine's built-in path renders one page per collection item via `map`.
@@ -523,7 +523,7 @@ function expandTemplatePage(templateFile, templateConfig) {
     delete require.cache[generatorPath];
     const mod = require(generatorPath);
     if (typeof mod.generate !== 'function') {
-      console.error(`[ERROR] Generator "${opts.generator}" has no generate(ctx, options) export`);
+      log.error(`Generator "${opts.generator}" has no generate(ctx, options) export`, { phase: 'templates' });
       buildErrors++;
       return 0;
     }
@@ -536,7 +536,7 @@ function expandTemplatePage(templateFile, templateConfig) {
       validateMapPaths(comp.vars || {}, partNames, label).forEach(m => mapErrors.push(m));
     });
     if (mapErrors.length) {
-      mapErrors.forEach(m => console.error(`[ERROR] ${m}`));
+      mapErrors.forEach(m => log.error(m, { phase: 'templates' }));
       buildErrors += mapErrors.length;
       return 0;
     }
@@ -571,7 +571,7 @@ function expandTemplatePage(templateFile, templateConfig) {
     buildPage(pageConfig, pageName);
     built++;
   });
-  console.log(`[TEMPLATE] ${path.basename(templateDir)}: built ${built} page(s) via "${opts.generator || 'built-in map'}"`);
+  log.info(`[TEMPLATE] ${path.basename(templateDir)}: built ${built} page(s) via "${opts.generator || 'built-in map'}"`, { phase: 'templates' });
   return built;
 }
 
@@ -727,7 +727,7 @@ function copyCollectionByModel(collection, sourcePath, destPath) {
       const files = listFilesRelative(src);
       requiredParts.forEach(rp => {
         if (!files.some(f => rp.regex.test(f))) {
-          console.error(`[ERROR] ${collection.name}/${entry.name}: required "${rp.name}" (match ${rp.match}) not found`);
+          log.error(`${collection.name}/${entry.name}: required "${rp.name}" (match ${rp.match}) not found`, { phase: 'collections', logger: collection.name });
           buildErrors++;
         }
       });
@@ -945,7 +945,7 @@ for (const pageFile of pageFiles) {
   try {
     cfg = JSON.parse(fs.readFileSync(pageFile, 'utf8'));
   } catch (error) {
-    console.error(`[ERROR] Failed to parse ${pageFile}:`, error.message);
+    log.error(`Failed to parse ${pageFile}: ${error.message}`, { phase: 'pages' });
     buildErrors++;
     continue;
   }
@@ -957,7 +957,7 @@ for (const pageFile of pageFiles) {
   if (!excluded) normalPageFiles.push(pageFile);
 }
 
-console.log(`[PAGES] Found ${normalPageFiles.length} page(s) + ${templatePages.length} template(s)\n`);
+log.info(`[PAGES] Found ${normalPageFiles.length} page(s) + ${templatePages.length} template(s)\n`, { phase: 'pages' });
 
 let pagesBuilt = 0;
 normalPageFiles.forEach(pageFile => {
@@ -966,7 +966,7 @@ normalPageFiles.forEach(pageFile => {
     buildPage(pageFile, pageName);
     pagesBuilt++;
   } catch (error) {
-    console.error(`[ERROR] Failed to build ${pageFile}:`, error.message);
+    log.error(`Failed to build ${pageFile}: ${error.message}`, { phase: 'pages' });
     buildErrors++;
   }
 });
@@ -976,7 +976,7 @@ templatePages.forEach(({ file, config }) => {
   try {
     pagesBuilt += expandTemplatePage(file, config);
   } catch (error) {
-    console.error(`[ERROR] Failed to expand template ${path.basename(file)}:`, error.message);
+    log.error(`Failed to expand template ${path.basename(file)}: ${error.message}`, { phase: 'templates' });
     buildErrors++;
   }
 });
