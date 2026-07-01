@@ -742,7 +742,7 @@ function copyCollectionByModel(collection, sourcePath, destPath) {
       fs.copyFileSync(src, dest);
     }
   });
-  console.log(`  [MODEL]  ${collection.name}: ${collection.source} → ${collection.destination} (${itemCount} item(s))`);
+  log.info(`  [MODEL]  ${collection.name}: ${collection.source} → ${collection.destination} (${itemCount} item(s))`, { phase: 'collections' });
 }
 
 // Resolve a collection's items from its source folder via the data_model, surfacing each part
@@ -831,25 +831,25 @@ function readJsonSafe(file, label) {
 // Function to copy collections (products, custom items, etc.) based on database.json
 function copyCollections() {
   if (!database.collections || database.collections.length === 0) {
-    console.log('[COLLECTIONS] No collections configured in database.json');
+    log.info('[COLLECTIONS] No collections configured in database.json', { phase: 'collections' });
     return;
   }
-  
+
   const enabledCollections = database.collections.filter(c => c.enabled);
-  
+
   if (enabledCollections.length === 0) {
-    console.log('[COLLECTIONS] No enabled collections found');
+    log.info('[COLLECTIONS] No enabled collections found', { phase: 'collections' });
     return;
   }
-  
-  console.log(`[COLLECTIONS] Found ${enabledCollections.length} enabled collection(s)`);
-  
+
+  log.info(`[COLLECTIONS] Found ${enabledCollections.length} enabled collection(s)`, { phase: 'collections' });
+
   enabledCollections.forEach(collection => {
     const sourcePath = path.join(SITE_ROOT, collection.source);
     const destPath = path.join(BUILD_DIR, collection.destination);
 
     if (!fs.existsSync(sourcePath)) {
-      console.log(`  [ERROR] ${collection.name}: Source not found (${collection.source})`);
+      log.error(`${collection.name}: Source not found (${collection.source})`, { phase: 'collections', logger: collection.name });
       return;
     }
 
@@ -857,29 +857,29 @@ function copyCollections() {
       // Back-compat: copy the whole collection, but nudge toward declaring a data_model
       // so the engine knows which parts are web assets vs data (leak control).
       copyDirectory(sourcePath, destPath);
-      console.log(`  [FOLDER] ${collection.name}: ${collection.source} → ${collection.destination}`);
-      console.log(`  [WARNING] ${collection.name}: no data_model - copying the whole collection; declare one to control which parts ship to build/`);
+      log.info(`  [FOLDER] ${collection.name}: ${collection.source} → ${collection.destination}`, { phase: 'collections' });
+      log.warn(`${collection.name}: no data_model - copying the whole collection; declare one to control which parts ship to build/`, { phase: 'collections', logger: collection.name });
       return;
     }
 
     const modelErrors = validateDataModel(collection);
     if (modelErrors.length) {
-      modelErrors.forEach(m => console.error(`[ERROR] ${collection.name}: ${m}`));
+      modelErrors.forEach(m => log.error(`${collection.name}: ${m}`, { phase: 'collections', logger: collection.name }));
       buildErrors += modelErrors.length;
       return; // don't copy with a broken data_model
     }
 
     copyCollectionByModel(collection, sourcePath, destPath);
   });
-  
-  console.log('');
+
+  log.info('', { phase: 'collections' });
 }
 
 // Main build process
-console.log('========================================');
-console.log('Starting website build process...');
-console.log(`Time: ${new Date().toLocaleString()}`);
-console.log('========================================\n');
+log.info('========================================', { phase: 'build' });
+log.info('Starting website build process...', { phase: 'build' });
+log.info(`Time: ${new Date().toLocaleString()}`, { phase: 'build' });
+log.info('========================================\n', { phase: 'build' });
 
 const buildStart = Date.now();
 let buildErrors = 0;  // any generator/page failure makes the build exit non-zero
@@ -892,14 +892,14 @@ fs.mkdirSync(BUILD_DIR, { recursive: true });
 
 // Copy assets (excluding CSS and JS which we handle separately)
 copyDirectory(path.join(ASSETS_DIR, 'images'), path.join(BUILD_DIR, 'assets', 'images'));
-console.log('[ASSETS] Copied images to build/assets/');
+log.info('[ASSETS] Copied images to build/assets/', { phase: 'assets' });
 
 // Copy component CSS and JS
 copyComponentCSS();
-console.log('[CSS] Component styles copied to build/assets/css/');
+log.info('[CSS] Component styles copied to build/assets/css/', { phase: 'assets' });
 
 copyComponentJS();
-console.log('[JS] Component scripts copied to build/assets/js/\n');
+log.info('[JS] Component scripts copied to build/assets/js/\n', { phase: 'assets' });
 
 // Copy collections (products, custom items, etc.) from shared folder
 copyCollections();

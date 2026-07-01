@@ -336,11 +336,14 @@ check('log: errors stream live to stderr + FAILED verdict on stderr',
   errCap.err.includes('[ERROR] boom') && errCap.err.includes('Build FAILED: 1 error(s)'));
 check('log: errorCount tallied', lgErr.errorCount === 1);
 
-// Level mapping: info is verbose-only; success is hidden at quiet.
-const infoNormal = captureStreams(() => createLogger().begin({ color: 'never', mode: 'normal' }).info('detail'));
-const infoVerbose = captureStreams(() => createLogger().begin({ color: 'never', mode: 'verbose' }).info('detail'));
+// Level mapping: info (narration) shows at normal; debug (per-item) is verbose-only; success is
+// hidden at quiet.
+const infoNormal = captureStreams(() => createLogger().begin({ color: 'never', mode: 'normal' }).info('narrate'));
+const debugNormal = captureStreams(() => createLogger().begin({ color: 'never', mode: 'normal' }).debug('detail'));
+const debugVerbose = captureStreams(() => createLogger().begin({ color: 'never', mode: 'verbose' }).debug('detail'));
 const okQuiet = captureStreams(() => createLogger().begin({ color: 'never', mode: 'quiet' }).success('hi'));
-check('log: level mapping (info verbose-only, success hidden at quiet)',
-  infoNormal.out === '' && infoVerbose.out.includes('detail') && okQuiet.out === '');
+check('log: level mapping (info at normal, debug verbose-only, success hidden at quiet)',
+  infoNormal.out.includes('narrate') && debugNormal.out === '' &&
+  debugVerbose.out.includes('detail') && okQuiet.out === '');
 
 done();
