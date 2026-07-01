@@ -346,4 +346,34 @@ check('log: level mapping (info at normal, debug verbose-only, success hidden at
   infoNormal.out.includes('narrate') && debugNormal.out === '' &&
   debugVerbose.out.includes('detail') && okQuiet.out === '');
 
+// --- lib/log-config.js: layered resolution (defaults -> config -> config[command] -> CLI) ---
+const { resolveLogOptions } = require('../lib/log-config');
+check('log-config: defaults (normal/auto)', (() => {
+  const o = resolveLogOptions({}, 'build', []); return o.mode === 'normal' && o.color === 'auto';
+})());
+check('log-config: config.json log block applies', (() => {
+  const o = resolveLogOptions({ log: { level: 'verbose', color: 'never' } }, 'build', []);
+  return o.mode === 'verbose' && o.color === 'never';
+})());
+check('log-config: per-command override beats shared', (() => {
+  const o = resolveLogOptions({ log: { level: 'normal', build: { level: 'quiet' } } }, 'build', []);
+  return o.mode === 'quiet';
+})());
+check('log-config: CLI wins, --log key=value (comma-joined)', (() => {
+  const o = resolveLogOptions({ log: { level: 'quiet' } }, 'build', ['build', '--log', 'level=verbose,color=never']);
+  return o.mode === 'verbose' && o.color === 'never';
+})());
+check('log-config: --quiet/--verbose/--no-color aliases', (() => {
+  return resolveLogOptions({}, 'build', ['--quiet']).mode === 'quiet' &&
+    resolveLogOptions({}, 'build', ['--verbose']).mode === 'verbose' &&
+    resolveLogOptions({}, 'build', ['--no-color']).color === 'never';
+})());
+
+// Integration: flags actually change what the CLI prints (colour off in a pipe).
+const verboseOut = execSync('node cli.js build --site example --verbose', { cwd: root, stdio: 'pipe' }).toString();
+check('flags: --verbose shows per-item [BUILD] lines', /\[BUILD\] /.test(verboseOut));
+const quietOut = execSync('node cli.js build --site example --quiet', { cwd: root, stdio: 'pipe' }).toString();
+check('flags: --quiet hides narration, keeps the summary',
+  !/\[COLLECTIONS\]/.test(quietOut) && /Build completed successfully/.test(quietOut));
+
 done();

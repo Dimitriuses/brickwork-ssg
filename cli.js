@@ -45,11 +45,23 @@ if ((command === 'build' || command === 'test') && !fs.existsSync(path.join(site
 // requires below.
 process.chdir(siteRoot);
 
+// Configure the shared logger from config.json `log` (+ `log[command]`) and CLI flags
+// (--quiet/--verbose/--no-color/--log key=value) before the build runs. Must happen before
+// requiring build.js, which shares the same logger singleton.
+function configureLogging(cmd) {
+  let config = {};
+  try { config = JSON.parse(fs.readFileSync(path.join(siteRoot, 'config.json'), 'utf8')); } catch (e) { /* defaults */ }
+  const { resolveLogOptions } = require('./lib/log-config');
+  require('./lib/log').configure(resolveLogOptions(config, cmd, argv));
+}
+
 if (command === 'build') {
+  configureLogging('build');
   require('./build.js');
 } else if (command === 'admin') {
   require('./shared/admin/server.js');
 } else { // test
+  configureLogging('test');
   require('./build.js');                 // build the site at cwd (sets exitCode on failure)
   const buildOk = !process.exitCode;
   const { runSiteTests } = require('./lib/test-runner');
