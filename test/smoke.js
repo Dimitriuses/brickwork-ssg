@@ -289,4 +289,58 @@ check('colors: policy never/always override detection',
   if (fc !== undefined) process.env.FORCE_COLOR = fc;
 })();
 
+// --- lib/log.js (terminal UX) ---
+const { createLogger } = require('../lib/log');
+// Capture what a function writes to stdout/stderr (restored afterwards).
+function captureStreams(fn) {
+  const out = [], err = [];
+  const so = process.stdout.write.bind(process.stdout);
+  const se = process.stderr.write.bind(process.stderr);
+  process.stdout.write = (s) => { out.push(s); return true; };
+  process.stderr.write = (s) => { err.push(s); return true; };
+  try { fn(); } finally { process.stdout.write = so; process.stderr.write = se; }
+  return { out: out.join(''), err: err.join('') };
+}
+
+// Record shape: structured entry with UTC timestamp, level, provenance, open metadata.
+const lgRec = createLogger().begin({ capture: true });
+lgRec.warn('w', { phase: 'collections', logger: 'component', source: 'c.build.js', hint: 'fix it' });
+const rec = lgRec.records()[0];
+check('log: record has schema (timestamp/phase/level/logger/message/metadata)',
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(rec.timestamp) &&
+  rec.level === 'WARNING' && rec.phase === 'collections' && rec.logger === 'component' &&
+  rec.message === 'w' && rec.metadata.source === 'c.build.js' && rec.metadata.hint === 'fix it');
+
+// Summary (success), warnings deduped, colour off -> byte-identical text.
+const lgOk = createLogger().begin({ color: 'never', mode: 'normal' });
+const okCap = captureStreams(() => {
+  lgOk.warn('be careful');
+  lgOk.warn('be careful');            // deduped -> (x2)
+  lgOk.success('all good');
+  lgOk.summary({ pagesBuilt: 3, errors: 0, elapsedMs: 120, outputDir: 'build/' });
+});
+check('log: warnings dedupe with (xN) in the flushed block',
+  okCap.out.includes('  - be careful (x2)'));
+check('log: success streams at normal + green-off is plain', okCap.out.includes('all good'));
+check('log: success summary text (plain when colour off)',
+  okCap.out.includes('Build completed successfully') && okCap.out.includes('Output directory: build/') &&
+  okCap.out.includes('Pages built: 3') && okCap.out.includes('Build time: 0.12s'));
+
+// Summary (failure) -> verdict on stderr, non-zero-ish; errorCount tallied.
+const lgErr = createLogger().begin({ color: 'never' });
+const errCap = captureStreams(() => {
+  lgErr.error('boom');
+  lgErr.summary({ pagesBuilt: 1, errors: 1, elapsedMs: 50 });
+});
+check('log: errors stream live to stderr + FAILED verdict on stderr',
+  errCap.err.includes('[ERROR] boom') && errCap.err.includes('Build FAILED: 1 error(s)'));
+check('log: errorCount tallied', lgErr.errorCount === 1);
+
+// Level mapping: info is verbose-only; success is hidden at quiet.
+const infoNormal = captureStreams(() => createLogger().begin({ color: 'never', mode: 'normal' }).info('detail'));
+const infoVerbose = captureStreams(() => createLogger().begin({ color: 'never', mode: 'verbose' }).info('detail'));
+const okQuiet = captureStreams(() => createLogger().begin({ color: 'never', mode: 'quiet' }).success('hi'));
+check('log: level mapping (info verbose-only, success hidden at quiet)',
+  infoNormal.out === '' && infoVerbose.out.includes('detail') && okQuiet.out === '');
+
 done();
