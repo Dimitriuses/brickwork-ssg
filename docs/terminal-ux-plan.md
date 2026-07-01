@@ -275,19 +275,9 @@ case stays a single `level`.
 
 ## Migration (incremental, mechanical)
 
-1. Land `lib/colors.js` + `lib/log.js` (`success/info/warn/error/debug` + `summary`); wire colour.
-2. Replace `build.js` `console.log`→`log.info`/`log.success`, `console.error`→`log.error`, and fold
-   `deferWarning`/`flushDeferredWarnings` into `log.warn` + the grouped flush. Do it **phase by
-   phase** (collections, then pages, then templates, then checks) so each slice is reviewable.
-3. Add config resolution: read `config.json` `log` (+ `log.<command>`), then apply env, then the
-   CLI flags (`--quiet` / `--verbose` / `--no-color` / `--log …`) — the order in
-   [Configuration](#configuration-configjson--flags).
-4. Route `ssg test` (`ok`/`FAIL`, `N passed/M failed`) and the admin server through the same module.
-5. Add the file sink (`log.file`) — append-streamed, un-coloured `text` to `log/<datetime>.log`;
-   leave `jsonl` until a CI need lands.
-6. Optionally expose a scoped logger to build scripts (see below).
-
-**Keep message text stable** during the move so the test suite keeps matching (see caveats).
+The concrete, ordered sequence lives in [Implementation plan (commits)](#implementation-plan-commits).
+The invariant that governs all of it: **migrate phase by phase, keep message text byte-identical, and
+keep `npm test` green after every commit.**
 
 ## Notes on the other Tooling & Distribution tasks
 
