@@ -4,6 +4,7 @@ const { RawHtml, raw, escapeHtml } = require('./lib/html');
 const { slugify } = require('./lib/slugify');
 const { resolveGenerator } = require('./lib/generators');
 const { globToRegExp } = require('./lib/glob');
+const log = require('./lib/log');
 
 // Path roots. The engine (this script, components, lib, layout) is shared by
 // every site; the site being built is the current working directory. Splitting
@@ -32,17 +33,10 @@ if (fs.existsSync(DATABASE_FILE)) {
 }
 
 // Deferred build warnings: collected during the build and printed grouped at the end (with a
-// repeat-count and the action text) so guidance isn't lost mid-output.
-const deferredWarnings = new Map(); // message -> count
+// repeat-count and the action text) so guidance isn't lost mid-output. Now backed by lib/log.js —
+// log.summary() flushes the grouped block. Thin wrapper keeps the existing call sites unchanged.
 function deferWarning(message) {
-  deferredWarnings.set(message, (deferredWarnings.get(message) || 0) + 1);
-}
-function flushDeferredWarnings() {
-  if (deferredWarnings.size === 0) return;
-  console.log('\n[WARNINGS] review these (they may need action):');
-  for (const [message, count] of deferredWarnings) {
-    console.log(`  - ${message}${count > 1 ? ` (x${count})` : ''}`);
-  }
+  log.warn(message);
 }
 
 // Flatten config for easier variable replacement
@@ -987,22 +981,13 @@ templatePages.forEach(({ file, config }) => {
   }
 });
 
-flushDeferredWarnings();
-
-const buildTime = ((Date.now() - buildStart) / 1000).toFixed(2);
-
-console.log('\n========================================');
-if (buildErrors > 0) {
-  console.error(`Build FAILED: ${buildErrors} error(s)`);
-  console.log(`Pages built: ${pagesBuilt}`);
-  console.log(`Build time: ${buildTime}s`);
-  console.log('========================================\n');
-  // Non-zero exit so CI / scripts fail loudly instead of shipping a broken site.
-  process.exitCode = 1;
-} else {
-  console.log('Build completed successfully');
-  console.log(`Output directory: ${path.relative(SITE_ROOT, BUILD_DIR)}/`);
-  console.log(`Pages built: ${pagesBuilt}`);
-  console.log(`Build time: ${buildTime}s`);
-  console.log('========================================\n');
-}
+// Flush the grouped warnings, then the verdict — coloured by outcome (traffic-light), text
+// byte-identical to before when colour is off (e.g. piped/CI).
+log.summary({
+  pagesBuilt,
+  errors: buildErrors,
+  elapsedMs: Date.now() - buildStart,
+  outputDir: `${path.relative(SITE_ROOT, BUILD_DIR)}/`
+});
+// Non-zero exit so CI / scripts fail loudly instead of shipping a broken site.
+if (buildErrors > 0) process.exitCode = 1;
