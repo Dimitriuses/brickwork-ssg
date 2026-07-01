@@ -375,6 +375,15 @@ are now decided too, so the [implementation plan](#implementation-plan-commits) 
 
 ## Implementation plan (commits)
 
+> **Built on branch `feat/log`** (`npm test` green every commit, 96 checks). As shipped, mapped to the
+> plan below: **(1)** `lib/colors.js`; **(2)** `lib/log.js` core; **(3)** wire summary + deferred
+> warnings (the format mockup); **(4)** startup + collections; **(5)** pages/templates —
+> `build.js` now has zero `console.*`; **(6)** `config.json` `log` + CLI flags; **(7)** `ssg test`
+> shares the palette; **(8)** file sink (**`text` + `jsonl`**, append-streamed) + retention. The
+> scoped `helpers.log` (plan §8) and `--json`/`log.phases`/watch remain deferred. Two small
+> deviations: per-item lines map to `debug` (not `info`) so `normal` hides them; and `ssg test` keeps
+> the build verdict and test verdict as separate sections (shared logger, not one merged summary).
+
 The through-line: **`npm test` stays green after every commit.** Each commit is small, reviewable,
 and reversible. Land 1–3 first (the module + one wired phase = the format mockup), review the look,
 then 4 migrates the rest. Build on a branch (e.g. `feat/log`).
@@ -428,8 +437,11 @@ then 4 migrates the rest. Build on a branch (e.g. `feat/log`).
   re-sync.
 
 ### Deferred (own trigger)
-- **`jsonl` file format** — on first real CI consumer.
-- **`--json` console mode**, **`log.phases`**, and **admin/watch** logging — with the watch task.
+- **`--json` console mode** and **`log.phases`** — when a need appears. (`jsonl` *file* format shipped
+  in commit 8; the console still renders human output.)
+- **Scoped `helpers.log`** for component build scripts — kills the leftover `[PRODUCTS]` `console.log`.
+- **admin/watch** logging — with the watch task.
 
 **Release.** This is additive + backward-compatible (no data-model or output-*text* change), so it
-can ship as a **minor** (v0.5.0) once phases 1–7 land; 8 and the deferred items follow independently.
+can ship as a **minor** (v0.5.0). Commits 1–8 are done on `feat/log`; the scoped logger + deferred
+items follow independently.
