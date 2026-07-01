@@ -252,7 +252,11 @@ function buildComponent(componentName, vars = {}, buildStack = []) {
     delete require.cache[absolutePath]; // Clear cache to allow rebuilds
 
     const buildScript = require(absolutePath);
-    html = buildScript.build(vars, loadComponent, replaceVariables, { slugify, escapeHtml, raw, collection: collectionByName });
+    html = buildScript.build(vars, loadComponent, replaceVariables, {
+      slugify, escapeHtml, raw, collection: collectionByName,
+      // Scoped logger: a build script reports through log with its provenance auto-filled.
+      log: log.scoped({ logger: 'component', source: `${componentName}.build.js`, phase: 'components' })
+    });
   } else {
     // Standard template replacement
     const template = loadComponent(componentName);

@@ -20,21 +20,23 @@ function build(vars, loadComponent, replaceVariables, helpers) {
   // Resolve the collection through the data model (engine-provided helper).
   const resolved = (helpers && typeof helpers.collection === 'function') ? helpers.collection(collectionName) : null;
   const items = (resolved && resolved.items) || [];
+  // Scoped logger from the engine (provenance auto-filled); no-op fallback for older engines.
+  const log = (helpers && helpers.log) || { debug() {}, warn() {} };
 
   let productsHtml = '';
 
   if (items.length === 0) {
-    console.log(`  [PRODUCTS] No items in collection "${collectionName}"`);
+    log.warn(`No items in collection "${collectionName}"`);
     productsHtml = '<div class="col-12"><p class="text-center text-muted">No products available</p></div>';
   } else {
-    console.log(`  [PRODUCTS] Found ${items.length} product(s)`);
+    log.debug(`  [PRODUCTS] Found ${items.length} product(s)`);
 
     items.forEach(({ id, item }) => {
       const data = (item && item.data) || {};
       const images = (item && Array.isArray(item.images)) ? item.images : [];
 
       if (images.length === 0) {
-        console.log(`  [WARNING] No images for "${id}" in collection "${collectionName}"`);
+        log.warn(`No images for "${id}" in collection "${collectionName}"`);
       }
 
       // `id` is the engine's canonical, URL-safe item slug (respects data.slug); the detail

@@ -348,6 +348,13 @@ check('log: level mapping (info at normal, debug verbose-only, success hidden at
 // ssg test shares this palette so its ok/FAIL colour matches the build + honours --no-color.
 check('log: palette exposed for shared colouring',
   typeof require('../lib/log').palette.green === 'function');
+// Scoped logger (build-script helpers): pre-binds provenance, per-call meta overrides.
+const scopedLg = createLogger().begin({ capture: true });
+scopedLg.scoped({ logger: 'component', source: 'x.build.js', phase: 'components' }).warn('scoped msg', { hint: 'h' });
+const sr = scopedLg.records()[0];
+check('log: scoped() pre-binds provenance (logger/source/phase) + merges meta',
+  sr.logger === 'component' && sr.metadata.source === 'x.build.js' && sr.phase === 'components' &&
+  sr.level === 'WARNING' && sr.metadata.hint === 'h');
 
 // --- lib/log-config.js: layered resolution (defaults -> config -> config[command] -> CLI) ---
 const { resolveLogOptions } = require('../lib/log-config');
@@ -376,8 +383,8 @@ check('log-config: --quiet/--verbose/--no-color aliases', (() => {
 const verboseOut = execSync('node cli.js build --site example --verbose', { cwd: root, stdio: 'pipe' }).toString();
 check('flags: --verbose shows per-item [BUILD] lines', /\[BUILD\] /.test(verboseOut));
 const quietOut = execSync('node cli.js build --site example --quiet', { cwd: root, stdio: 'pipe' }).toString();
-check('flags: --quiet hides narration, keeps the summary',
-  !/\[COLLECTIONS\]/.test(quietOut) && /Build completed successfully/.test(quietOut));
+check('flags: --quiet is silent except the summary (build.js + component scripts)',
+  !/\[COLLECTIONS\]/.test(quietOut) && !/\[PRODUCTS\]/.test(quietOut) && /Build completed successfully/.test(quietOut));
 
 // --- file sink + retention (log commit 8) ---
 check('log-config: file from config (object) + CLI format=jsonl', (() => {
