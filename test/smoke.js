@@ -345,6 +345,9 @@ const okQuiet = captureStreams(() => createLogger().begin({ color: 'never', mode
 check('log: level mapping (info at normal, debug verbose-only, success hidden at quiet)',
   infoNormal.out.includes('narrate') && debugNormal.out === '' &&
   debugVerbose.out.includes('detail') && okQuiet.out === '');
+// ssg test shares this palette so its ok/FAIL colour matches the build + honours --no-color.
+check('log: palette exposed for shared colouring',
+  typeof require('../lib/log').palette.green === 'function');
 
 // --- lib/log-config.js: layered resolution (defaults -> config -> config[command] -> CLI) ---
 const { resolveLogOptions } = require('../lib/log-config');
