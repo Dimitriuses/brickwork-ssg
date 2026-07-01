@@ -104,12 +104,19 @@ for where the value comes from):
 
 | Level | Shows |
 |---|---|
-| `quiet` | errors + the final summary only |
-| `normal` (default) | phase headers, grouped warnings, summary (today's signal, minus per-item chatter) |
-| `verbose` | everything: per-item `[BUILD]` lines, timings, resolved paths, `debug` |
+| `quiet` | ERROR + the final summary (+ timings) |
+| `normal` (default) | phase headers, SUCCESS, WARNING, ERROR, summary, **timings** — no per-item lines |
+| `verbose` | + INFO (per-item lines) + DEBUG + resolved paths |
 
-Plus a colour policy (`auto` / `always` / `never`, handled in `lib/colors.js`). The logger stores
-the resolved level; `log.debug`/`log.info` no-op below their threshold.
+- **Timings show at every level** (decided) — the summary's total elapsed always, phase durations
+  from `normal` up; only *per-item* timing is `verbose`.
+- **The mapping is a single editable table** (decided): a `{ renderCategory → minLevel }` map in
+  `lib/log.js` (e.g. `error: quiet`, `summary: quiet`, `timing: quiet`, `phaseHeader: normal`,
+  `success: normal`, `warning: normal`, `perItem: verbose`, `debug: verbose`). Change the mapping in
+  one place, not scattered `if (level === …)` conditionals.
+- Plus a colour policy (`auto` / `always` / `never`, handled in `lib/colors.js`). The logger stores
+  the resolved level; a call below its category's threshold is recorded (for the `jsonl` file) but
+  not printed to the console.
 
 ## Configuration (config.json + flags)
 
@@ -346,28 +353,28 @@ case stays a single `level`.
   files only. **No default cap** — nothing is deleted unless configured.
 - **`ssg init` / `add`:** built on `log` from day one (logger ships first); their output uses `log`.
 
-## Before we start — things to lock first
+## Locked before coding (decided)
 
-The **data model, config, file sink, and CLI are settled** — enough to start coding. The four items
-below are about *rendering and lifecycle*, not data; lock 1–3 before the **mass call-site migration**
-(they're cheap to decide, expensive to redo), and 4 falls out of the first prototype.
+The data model, config, file sink, and CLI were already settled; these four (rendering + lifecycle)
+are now decided too, so the [implementation plan](#implementation-plan-commits) can start.
 
 1. **The CLI command owns the report lifecycle, not `build.js`.** `ssg build` does
    `begin → build() → summary → exit`; `ssg test` does `begin → build() → checks() → tests() →
-   summary → exit` — **one report, one summary** spanning all phases. `build.js` only *logs*; it must
-   not call `summary()`/`exit` itself, or `test` can't compose. (Also: the logger needs a plain
-   **streaming mode** with no end-of-run flush for the long-lived **admin** server — grouping is a
-   bounded-run feature, errors always stream live.)
-2. **Test-suite strategy (the main risk).** `smoke.js` regex-matches exact strings and the always-on
-   checks scan stdout. Decide up front: **(a)** keep every message's *text* byte-identical (only the
-   chrome around it changes), **and (b)** add a **record-capture mode** so tests assert on structured
-   records, not formatted stdout. Migrate a phase, keep `npm test` green, repeat.
-3. **Verbosity mapping.** Pin which levels render per mode so the **default** still contains whatever
-   the tests grep: proposed — `quiet` = ERROR + summary; `normal` = phase headers + SUCCESS +
-   WARNING + ERROR + summary (no per-item lines); `verbose` = + INFO (per-item) + DEBUG + timings.
-4. **A console format mockup.** One concrete sketch of a phase header, a grouped warning
-   (count + hint), and the coloured summary — agree it before reformatting call sites. (Best produced
-   *with* the first prototype.)
+   summary → exit` — **one report, one summary** across all phases. `build.js` only *logs*; it never
+   calls `summary()`/`exit`. **Errors are always emitted in real time** (streamed as they happen, not
+   held for the flush); grouped non-error output renders progressively / at the section boundary.
+   Grouping is a **bounded-run** feature — the logger also supports plain **streaming** (no end
+   flush), which is what the future **watch** task (smart rebuild-on-save for the server) will use;
+   the admin server is **not migrated now** — it waits for that task.
+2. **Test-suite strategy.** Keep every message's **text byte-identical** — only the chrome (colour,
+   grouping, prefixes) and the recording change. Add a **record-capture mode** so tests can assert on
+   structured records instead of formatted stdout. Migrate a phase, keep `npm test` green, repeat.
+3. **Verbosity mapping** (see [Operating modes](#operating-modes)): `quiet` = ERROR + summary;
+   `normal` = phase headers + SUCCESS + WARNING + ERROR + summary; `verbose` = + INFO + DEBUG.
+   **Timings show at all levels.** The mapping is a **single editable `{ category → minLevel }`
+   table** in `lib/log.js`, not scattered conditionals.
+4. **Console format mockup** — produced **with the first prototype** (commit 3 below), so the format
+   is agreed against real output before the mass migration.
 
 ## Still genuinely open (not blockers)
 
@@ -375,3 +382,64 @@ below are about *rendering and lifecycle*, not data; lock 1–3 before the **mas
   refine as call sites are migrated.
 - Datetime in **local vs UTC** for the *console* summary line (the record/filename are UTC-fixed).
 - A `--json` **console** mode (stdout as JSONL) for piping — distinct from the file sink; defer.
+
+## Implementation plan (commits)
+
+The through-line: **`npm test` stays green after every commit.** Each commit is small, reviewable,
+and reversible. Land 1–3 first (the module + one wired phase = the format mockup), review the look,
+then 4 migrates the rest. Build on a branch (e.g. `feat/log`).
+
+### 1 — `lib/colors.js` (traffic-light primitive)
+- Raw-ANSI helpers (`green`/`yellow`/`red`/`dim`/`bold`) behind a `paint(kind, text)`; **no chalk**.
+- Enablement decided once: `isTTY` + `NO_COLOR` + `FORCE_COLOR` + a `color: auto|always|never`
+  input; disabled ⇒ helpers return the string unchanged.
+- Tiny unit test (colour off ⇒ identical string; on ⇒ wrapped). No behaviour change anywhere yet.
+
+### 2 — `lib/log.js` core (record + console sink + summary), unwired
+- The **record** (`timestamp/phase/level/logger/message/metadata`) and API
+  `log.success/info/warn/error/debug(msg, { phase, logger, ...metadata })`.
+- **Report lifecycle**: `log.begin()` … `log.summary()` (owned by the caller). Fan-out to **sinks**;
+  console sink only for now. **Errors stream immediately**; other records buffer and render at the
+  section boundary / summary. Dedupe→`count`; group by `phase`→`level`.
+- The `{ category → minLevel }` **mapping table**; a **record-capture mode** (`log.records()`), and
+  `log.errorCount`.
+- Unit-tested in isolation (`test/log.test.js`): grouping, dedupe, level filtering, capture, colour
+  off. **Not imported by `build.js` yet**, so smoke is untouched.
+
+### 3 — wire ONE phase (`collections`) + agree the console format  ← the mockup
+- `ssg build` (in `cli.js`) brackets the run with `log.begin()`/`log.summary()`; the `collections`
+  phase of `build.js` logs through `log.*` (fold its `deferWarning` calls in). **Message text stays
+  byte-identical.**
+- This produces the first real coloured, grouped section + summary — the **format mockup** to sign
+  off. Adjust smoke only where it matched *chrome* (it shouldn't; text is stable).
+
+### 4 — migrate the remaining phases
+- `pages`, `templates`, `assets`, `checks`: convert their `console.*` → `log.*`; retire
+  `deferWarning`/`flushDeferredWarnings` and the `buildErrors` counter (exit keys off
+  `log.errorCount`). Keep smoke green each phase.
+
+### 5 — config + flag resolution
+- Read `config.json` `log` (+ `log.build`/`log.test`), then env (`NO_COLOR`/`FORCE_COLOR`), then CLI
+  (`--quiet`/`--verbose`/`--no-color`/`--log key=value`, repeated + comma-joined). Tests for the
+  precedence order.
+
+### 6 — `ssg test` through the logger
+- `ok`/`FAIL` + `N passed/M failed` via `log.*`; **one report** spanning build → checks → tests with
+  a single summary; `log.test` overrides. (Admin/watch still deferred to the watch task.)
+
+### 7 — file sink (text)
+- Second sink: append-streamed, un-coloured `text` to `log/<stamp>-<pid>.log` (own level/format);
+  `log.file` config + `--log file=…`. **Retention** (`maxFiles`/`maxAgeDays`, startup prune,
+  own-pattern only, opt-in).
+
+### 8 — scoped logger for build scripts *(optional, later)*
+- `helpers.log` (4th arg) pre-binding `logger` + `metadata.source` + `phase`; migrate the engine's
+  own `*.build.js` (e.g. `products.build.js`'s `[PRODUCTS]` lines). Additive; sites adopt when they
+  re-sync.
+
+### Deferred (own trigger)
+- **`jsonl` file format** — on first real CI consumer.
+- **`--json` console mode**, **`log.phases`**, and **admin/watch** logging — with the watch task.
+
+**Release.** This is additive + backward-compatible (no data-model or output-*text* change), so it
+can ship as a **minor** (v0.5.0) once phases 1–7 land; 8 and the deferred items follow independently.
