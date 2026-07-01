@@ -265,4 +265,28 @@ check('map: a miss resolves to "" and warns',
 // array $images both reach the badge component).
 check('component vars resolve per item (B2)', /class="badge">Alpha \(2\)/.test(mappedAlpha));
 
+// --- lib/colors.js (terminal UX) ---
+const colors = require('../lib/colors');
+check('colors: disabled palette is identity (byte-identical output when off)',
+  colors.palette(false).green('x') === 'x' && colors.palette(false).red('y') === 'y');
+check('colors: enabled palette wraps in ANSI + reset',
+  colors.palette(true).green('x') === '\x1b[32mx\x1b[0m');
+check('colors: policy never/always override detection',
+  colors.shouldColor('never', { isTTY: true }) === false &&
+  colors.shouldColor('always', { isTTY: false }) === true);
+// The 'auto' branch reads env, so control it for a deterministic assertion.
+(() => {
+  const nc = process.env.NO_COLOR, fc = process.env.FORCE_COLOR;
+  delete process.env.NO_COLOR; delete process.env.FORCE_COLOR;
+  check('colors: auto follows TTY',
+    colors.shouldColor('auto', { isTTY: true }) === true &&
+    colors.shouldColor('auto', { isTTY: false }) === false);
+  process.env.NO_COLOR = '1';
+  check('colors: NO_COLOR disables auto even on a TTY',
+    colors.shouldColor('auto', { isTTY: true }) === false);
+  delete process.env.NO_COLOR;
+  if (nc !== undefined) process.env.NO_COLOR = nc;
+  if (fc !== undefined) process.env.FORCE_COLOR = fc;
+})();
+
 done();
