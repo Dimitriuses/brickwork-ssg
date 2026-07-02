@@ -299,9 +299,11 @@ function buildPage(pageConfig, pageName) {
   }
   builtPageNames.add(pageData.page);
 
-  // Load layout
-  const layout = loadComponent(pageData.layout || '_layout');
-  
+  // The layout is a first-class component: it's built via buildComponent below (so it can carry a
+  // <name>.build.js / subComponents / {{COMPONENT}} like any other), with CONTENT + the chrome
+  // (HEADER/FOOTER/PAGE_TITLE/…) passed as its component vars.
+  const layoutName = pageData.layout || '_layout';
+
   // Build components
   let componentsHtml = '';
   const usedComponents = new Set(); // Track which components have been placed
@@ -414,7 +416,7 @@ function buildPage(pageConfig, pageName) {
     BODY_EXTRA: raw(jsScripts)
   };
   
-  const finalHtml = normalizeWebPaths(replaceVariables(layout, pageVars));
+  const finalHtml = normalizeWebPaths(buildComponent(layoutName, pageVars));
 
   // Write output
   const outputFile = path.join(BUILD_DIR, `${pageData.page}.html`);
