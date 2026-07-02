@@ -215,6 +215,11 @@ coordinated breaking release, done *after* Phase 1 ships and the sites have run 
 
 ### Phase 1 — `ssg add` + `--all-used` (~v0.6.0, additive)
 
+> **Built on branch `feat/deploy`** (`npm test` green each commit, 109 checks): **1** `lib/deploy.js`
+> (copy primitive + drift); **2** `ssg add <name>` CLI; **3** extracted the shared `lib/components.js`
+> resolver + `lib/used-materials.js`; **4** `ssg add --all-used` (+ acceptance test). **5** = this docs
+> pass. The engine still ships every default, so it's additive/opt-in.
+
 1. **`lib/deploy.js` — the copy primitive.** Walk a component's engine folder (`<name>.html`,
    `<name>.build.js`, `<name>.json`, `style.css`, `script.js`, + nested sub-component folders) and,
    per file, classify against the site copy: **missing** → copy, **identical** → skip, **differs** →

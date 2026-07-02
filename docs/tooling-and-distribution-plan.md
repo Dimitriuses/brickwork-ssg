@@ -27,6 +27,10 @@ structural change and the prerequisite for (2) and (3).
 
 > **Detailed plan (with `ssg init`, as one two-phase task incl. an "eject" transition bridge):**
 > [slim-core-plan.md](slim-core-plan.md). The summary below stays roadmap-level.
+>
+> **Phase 1 built** (branch `feat/deploy`): `ssg add <name>` + `ssg add --all-used` deploy engine
+> materials into a site (per-file gap-fill, drift reporting), backed by a shared component resolver.
+> The slim core + `ssg init` are Phase 2 (breaking), after sites run `--all-used`.
 
 **Goal.** Turn "drop a same-named file into `components/` to override the engine" into an explicit
 **`ssg add <kind> <name>`** that scaffolds a material (component, generator, test, page) into the

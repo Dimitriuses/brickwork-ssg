@@ -33,7 +33,15 @@ node engine/cli.js build                 # build the site (cwd) into build/
 node engine/cli.js build --site path     # or build any site directory
 node engine/cli.js admin                 # product admin on http://localhost:3000
 node engine/cli.js test                  # build + engine checks + site tests
+node engine/cli.js add <name>            # copy an engine material into the site (--force, --dry-run)
+node engine/cli.js add --all-used        # copy every material the site uses but inherits
 ```
+
+**Output** flows through one module: colour-coded (green/amber/red), with `--quiet`/`--verbose`, a
+`config.json` `log` block + `--log key=value`, and an optional `jsonl` file sink. **Deploy** copies a
+material (all its files, incl. nested sub-components) into your site so you *own* it; `--all-used`
+does that for everything the site currently inherits — an edited file is reported as **drift**, not
+overwritten (use `--force`).
 
 Add scripts to your site's `package.json`:
 

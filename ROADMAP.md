@@ -128,7 +128,10 @@ it needs a window-based generation model (below) and is a large task in its own 
 > (deploy/slim-core, `ssg init`, plugins/registry, and the terminal-UX overhaul incl. a traffic-light
 > colour system).
 
-- **Material *deploy* commands & a slim core** — `ssg add component <name>` (and
+- **Material *deploy* commands & a slim core** *(Phase 1 built on `feat/deploy`: `ssg add <name>` +
+  `ssg add --all-used` deploy engine materials into a site, per-file with drift reporting; slim core
+  + `ssg init` are Phase 2/breaking — see [slim-core-plan.md](docs/slim-core-plan.md))* —
+  `ssg add component <name>` (and
   generators/tests) scaffolds a material into a site from a catalog, **and the engine stops
   shipping example/default materials that every site silently inherits**. This fixes three
   pains: example generators producing pages nobody asked for (no empty-override needed);
