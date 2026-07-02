@@ -509,4 +509,24 @@ check('used-materials: sub-components collapse to their parent folder (deploy fo
   uc.folders.includes('products') && uc.folders.includes('faq') &&
   !uc.folders.includes('productCard') && !uc.folders.includes('faqItem'));
 
+// Acceptance: `ssg add --all-used` on an inheriting site -> it owns every used material folder
+// (the completeness the slim core relies on). Sub-components + dependencies come along.
+const utmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwall-'));
+const utmpArg = utmp.replace(/\\/g, '/');
+try {
+  fs.mkdirSync(path.join(utmp, 'pages', 'index'), { recursive: true });
+  fs.writeFileSync(path.join(utmp, 'pages', 'index', 'index.json'),
+    JSON.stringify({ page: 'index', layout: '_layout', components: [{ name: 'hero', vars: {} }, { name: 'faq', vars: {} }] }));
+  fs.writeFileSync(path.join(utmp, 'config.json'), JSON.stringify({ site: { name: 'T' }, nav: [] }));
+  const out = execSync(`node cli.js add --all-used --site "${utmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  const folders = usedComponentNames({ siteRoot: utmp, engineRoot: root }).folders;
+  const ownsAll = folders.every(f => fs.existsSync(path.join(utmp, 'components', f)));
+  check('ssg add --all-used: inheriting site ends up owning every used material folder',
+    /across \d+ material\(s\)/.test(out) && ownsAll &&
+    fs.existsSync(path.join(utmp, 'components', 'faq', 'faqItem.html')) &&   // sub-component came along
+    fs.existsSync(path.join(utmp, 'components', 'contactIcons')));          // footer dependency pulled in
+} finally {
+  try { fs.rmSync(utmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
