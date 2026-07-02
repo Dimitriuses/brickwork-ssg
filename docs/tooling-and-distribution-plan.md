@@ -99,8 +99,15 @@ the built-in catalog.
 **Depends on (1).** Only worth doing once the deploy/ownership model is proven on the in-engine
 catalog.
 
+**Provenance / material listing (moved here from §1).** Record where each deployed material came from
+(engine version / package) in the material's `<name>.json`, and add tooling to **list a site's
+materials + their source** (and a future `ssg update <name>`). Deferred to this phase because the
+stamp is only useful with the registry that reads it. See
+[slim-core-plan.md](slim-core-plan.md) → Notes ("Provenance stamp").
+
 **Open questions.**
 - Package convention (e.g. `brickwork-material-*` / a `brickwork.materials` field in `package.json`).
+- Where the stamp lives for materials with no `.json` (a template-only component; a `.js` generator).
 - **Trust**: a material's `*.build.js` runs arbitrary JS at build time. Installing a third-party
   material = running its code. Document the trust boundary; consider a manifest-only (no-build-script)
   tier for "safe" materials.

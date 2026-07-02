@@ -1,9 +1,10 @@
 # Material deploy, slim core & `ssg init` — draft plan (for discussion)
 
-> **Status: draft.** Combines two roadmap items — **"Material *deploy* commands & a slim core"** and
-> **"`ssg init`"** — into **one task, two phases**, with a transitional "eject" bridge between them so
-> the breaking change lands safely. Detail for [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md)
-> §1–2. Nothing here is decided.
+> **Status: decisions locked; ready to build Phase 1.** Combines two roadmap items — **"Material
+> *deploy* commands & a slim core"** and **"`ssg init`"** — into **one task, two phases**, bridged by
+> a transitional `ssg add --all-used` so the breaking change lands safely. Detail for
+> [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §1–2. See **Decided** and the
+> **Implementation plan (commits)** below.
 
 ## The problem
 
@@ -61,53 +62,67 @@ command should say so in its summary.
 Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) → **Phase 2 = v0.7.0**
 (breaking, loud migration note). Pre-1.0, so a minor carries the breaking change.
 
-### Phase 1 — deploy commands + the eject bridge *(defaults still shipped; additive)*
+### Phase 1 — deploy commands + the `--all-used` bridge *(defaults still shipped; additive; ~v0.6.0)*
 
-- **`ssg add <kind> <name>`** — deploy a single material (component/generator/test/page) from the
-  engine **catalog** into the site (`ssg add component header`). Refuses to overwrite unless
-  `--force`; `--dry-run`. This is the **permanent** command.
-- **`ssg eject`** *(name TBD)* — the **transitional** bulk command: resolve the site's used-but-
-  inherited components (+ `_layout`) and gap-fill them per file. `--dry-run`, logger output. This is
-  the **bridge**, removed in Phase 2.
-- The engine is otherwise **unchanged** — it still ships every default, so nothing breaks and eject
-  is opt-in. Validate on the **demo** (eject → owns all 8 → builds identically) and confirm the
-  **private** site's eject is a near-no-op.
+- **`ssg add <name>`** (component by default; `ssg add <kind> <name>` for others) — deploy a single
+  material from the engine **catalog** into the site. `--force` to overwrite, `--dry-run` to preview.
+  The **permanent** command.
+- **`ssg add --all-used`** *(decided name)* — the **transitional bridge**: auto-detect the site's
+  used-but-inherited materials (components + `_layout`) and gap-fill them per file. Same copy path as
+  single `add`, just over the detected set. `--dry-run`; logger output (phase `add`). Removed in
+  Phase 2.
+- **"Used" = build resolution** *(decided)*: walk the site's component graph exactly as the build
+  does — page `components` arrays + `{{COMPONENT:…}}` + declared `subComponents` + dependencies +
+  the always-on `header`/`footer`/`_layout` — then, per file, check whether it **resolves to the
+  engine while the site lacks a local copy** → copy it.
+- The engine is otherwise **unchanged** (still ships every default) → opt-in and safe. Validate on
+  the **demo** (`--all-used` → owns all 8 inherited → builds identically) and confirm the **private**
+  site's run is a near-no-op (it already owns everything).
 
-### Phase 2 — slim core + `ssg init` *(defaults removed; breaking)*
+### Phase 2 — slim core + `ssg init` *(defaults removed; breaking; ~v0.7.0)*
 
-- **Slim core.** The default components move out of the auto-resolved `components/` into a
-  **`catalog/`** (shipped but not resolved during a build). Component resolution for a name the site
-  doesn't own → a **clear "not installed — run `ssg add <name>`" error**, not a silent miss.
-- **`ssg add`** now pulls from the catalog (same command, its permanent home). Remove **`ssg eject`**
-  (nothing left to eject).
-- **`ssg init [dir] [--template <name>]`** — scaffold a working project: a minimal `config.json`,
-  `pages/index/`, `assets/`, and a **baseline set of deployed materials**. Your sub-idea — *copy the
-  demo* — fits as a named template (`--template demo`) alongside a **`blank`** default (see below).
-- **Migration note (loud):** "bumping to v0.7 removes bundled defaults; run `ssg eject` on v0.6
-  first (or `ssg add` each material) so your site owns them." The bump is gated on that.
+- **Slim core.** Default materials move from the auto-resolved `components/` to an in-engine
+  **`catalog/`** *(decided)* — shipped but **not** resolved during a build. The **core keeps the
+  generation tools** (build pipeline, data model, template/`map` rendering, component resolution, the
+  log system); the catalog holds **optional materials**. Using any is opt-in — themed / design-system
+  variants are an **option, not a requirement** (they belong to the Phase-3 registry, below).
+- Build resolution for a name the site doesn't own → a **clear "not installed — run `ssg add <name>`"
+  error**, not a silent miss. `ssg add` now pulls from the catalog (its permanent home). Remove
+  **`ssg add --all-used`** (nothing left to eject).
+- **`_layout` is deployable too** *(decided)* — it lives in the catalog **as a component** (recommended
+  over inventing a "page" material kind: it already resolves as a component and lives in
+  `components/_layout/`). `ssg init` always installs it; existing sites get it via `--all-used`.
+- **`ssg init [dir]`** — scaffold a **blank** project from scratch *(decided)*: `package.json`,
+  `config.json`, `assets/css/global.css`, `assets/js/global.js`, `pages/index/index.{html,json}`
+  (a welcome page), and `components/_layout/_layout.html`. **`ssg init --template demo`** copies the
+  **demo** project from its repository.
+- **Migration note (loud):** "v0.7 removes bundled defaults; on v0.6 run `ssg add --all-used` (or
+  `ssg add` each material) so your site owns them first." The bump is gated on that.
 
 ## Notes & suggestions
 
-- **`ssg add` and `ssg eject` share one copy path.** Eject = "for each used-inherited material, do
-  what `ssg add` does, per missing file." Build `ssg add` as the primitive; eject orchestrates it.
-- **`_layout`: core or catalog?** It's used by *every* page. Two options: keep `_layout` in the
-  **core** (never removed — one thing a slim engine still guarantees), or make it a deployable that
-  `ssg init` always installs. Leaning **keep in core** — it's the one universal.
+- **One copy path.** `ssg add --all-used` = "for each used-inherited material, do what `ssg add`
+  does, per missing file." Build `ssg add <name>` as the primitive; `--all-used` orchestrates it over
+  the detected set. Same code, one behaviour to test.
 - **The catalog is the current `components/`, relocated.** Minimal work: move `engine/components/*`
   → `engine/catalog/*` and stop resolving builds from it. Keep it **build-tested** — the bundled
   `example/` site should deploy + exercise the catalog so it can't rot (a catalog that nobody builds
-  silently breaks).
+  silently breaks). `_layout` moves into the catalog too (deployable component).
 - **Generators need nothing now.** The engine ships **no** default generators (`registry.json` is
   `{}`), so slim core is a *components*-only concern today. Keep `ssg add generator <name>` in the
-  design for symmetry, but there's no generator inheritance to eject.
-- **`ssg init` source.** A **`blank`** template (generic config + one page + the core materials the
-  page needs) is the right *default* — a fresh project shouldn't inherit "Brickwork & Co." content.
-  `--template demo` copies the demo (a complete, real storefront) as a richer starting point. Caveat:
-  the demo carries `shared/products` sample data + specific copy; fine for a demo template, wrong as
-  the blank default.
-- **Optional: stamp provenance.** Copied materials could record which engine version they came from
-  (a header comment or a `materials.lock`), enabling a future **`ssg update <name>`** that re-pulls +
-  shows a diff. Defer, but the eject/add copy is the natural place to write it.
+  design for symmetry, but there's no generator inheritance to `--all-used`.
+- **`ssg init` = a real blank project.** Not "copy a baseline set of catalog materials" — literally
+  emit the files a working site needs: `package.json` (with `build`/`test`/`admin` scripts + the
+  engine submodule reference), `config.json`, `assets/css/global.css` + `assets/js/global.js`,
+  `pages/index/index.{html,json}` (a welcome page), and `components/_layout/_layout.html`. So a fresh
+  `ssg init && npm run build` produces a page with no other materials needed. `--template demo` is the
+  richer path — a copy of the demo repo.
+- **Provenance stamp → the material's `.json`, but deferred with the registry.** Decided location:
+  record the source (e.g. engine version) in the copied material's `<name>.json`. But it's only
+  *useful* alongside the tooling that reads it (e.g. "list the site's materials + where they came
+  from"), so both the stamp and its display move to **tooling draft §3 (plugins + material
+  registry)**. `ssg add`/`--all-used` stay plain copies for now. (Wrinkle to settle there: materials
+  with no `.json` — a template-only component, or a `.js` generator — need a stamp home too.)
 
 ## Caveats / watch-items
 
@@ -129,22 +144,63 @@ Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) �
   **Third-party/npm distribution + a registry is a later item** (tooling draft §3) — keep this task
   to the in-engine catalog so it stays small.
 
-## Open questions
+## Decided
 
-- **Names.** The bridge verb (`eject` / `vendor` / `localize` / `adopt` / `ssg add --all-used`); and
-  confirm `ssg add` / `ssg init`.
-- **"Used" detection.** Build-resolution capture (accurate, needs a build) vs a static scan of page
-  configs + `{{COMPONENT}}` + `subComponents` (no build, may miss dynamic) vs **both** (scan, then
-  confirm against a build). Recommendation leans build-resolution; confirm.
-- **Eject scope.** Components + `_layout` only, or also page-assets / generators / tests? (Inheritance
-  surface today is components + layout.)
-- **`_layout`** — core or catalog (see notes).
-- **Catalog location** — in-engine `catalog/` (simple) vs a separate "materials" project (sets up §3
-  distribution but more moving parts). Start in-engine?
-- **`ssg init` default** — `blank` baseline vs `demo`; and does `init` also wire `package.json`
-  scripts + the engine submodule, or assume they exist?
-- **Provenance/lockfile** — stamp copied materials for a future `ssg update`, or keep copies plain?
-- **Keep or drop the bridge in Phase 2** — remove `ssg eject` entirely, or retain it as
-  `ssg add --all-used` for niche re-syncs?
-- **Reconcile existing partial copies** — the private site owns everything already; should eject also
-  *detect drift* (an owned file that differs from the engine's) and report it, or strictly gap-fill?
+- **Bridge command:** **`ssg add --all-used`** — a flag on the permanent `ssg add`, not a separate verb.
+- **"Used" detection:** **build resolution** — the site's actual component graph, per file, site-first.
+- **Scope:** **components + `_layout`** (the engine ships no default generators, so nothing else).
+- **`_layout`:** a **deployable catalog component** (not kept in core; not a new "page" material kind).
+- **Catalog:** **in-engine `catalog/`**; the core keeps the generation tools, the catalog holds
+  optional materials + (later) themed variants.
+- **`ssg init`:** emit a **blank** project (`package.json`, `config.json`, `global.css`/`global.js`,
+  `pages/index` welcome page, `components/_layout`); **`--template demo`** copies the demo repo.
+- **Provenance stamp:** in the material's `.json`, but **deferred to §3** (registry) with its display.
+- **Phase 2 removes `--all-used`** (its job is done).
+
+## Residual open (small)
+
+- **Drift detection.** `--all-used` strictly gap-fills; should it *also* flag an already-owned file
+  that has drifted from the engine's current version (informational only), or stay silent?
+- **`--template demo` mechanism.** `git clone` the demo repo at init time (needs network, always
+  current) vs bundle a demo snapshot in the engine (offline, can go stale). Lean **git clone**, with a
+  helpful error when offline.
+- **A used name the engine never had** (a purely site-authored component) — `--all-used` skips it
+  silently (already owned); confirm that's the wanted behaviour.
+
+## Implementation plan (commits)
+
+`npm test` green after each. **Phase 1** is the actionable near-term work; **Phase 2** is a
+coordinated breaking release, done *after* Phase 1 ships and the sites have run `--all-used`.
+
+### Phase 1 — `ssg add` + `--all-used` (~v0.6.0, additive)
+
+1. **`lib/deploy.js` — the copy primitive.** `materialFiles(name)` (a component's engine files:
+   `<name>.html`, `<name>.build.js`, `<name>.json`, `style.css`, `script.js`, + nested sub-component
+   folders, honouring `registry.json` folder maps) and `deployMaterial(name, { siteRoot, force,
+   dryRun })` → per-file copy engine→site, skip existing unless `force`, return `{ copied, skipped }`.
+   Unit-tested against a temp site. No CLI yet.
+2. **`ssg add <name>` CLI.** New `add` command in `cli.js`: `configureLogging('add')`, deploy the
+   named material via `lib/deploy`, `--force`/`--dry-run`, logger summary ("added N file(s)"); a name
+   with no engine material → clear error. Tests: adds a component into a temp site; `--dry-run` writes
+   nothing; `--force` overwrites.
+3. **`lib/used-materials.js` — used-inherited detection.** Extract/reuse the build's component-graph
+   walk (page `components` + `{{COMPONENT}}` + `subComponents` + deps + `header`/`footer`/`_layout`)
+   to compute the used set, then per file mark those that **resolve to the engine while the site
+   lacks a copy**. Unit-tested on a fixture site that references + inherits a couple of components.
+4. **`ssg add --all-used`.** Orchestrate detection → `deployMaterial` per missing file → one summary;
+   `--dry-run`. Acceptance test: after `--all-used` on the fixture, a build with the engine's
+   `components/` temporarily hidden **still succeeds** (proves completeness); owned files untouched.
+5. **Docs + README.** Document the `add` commands; mark Phase 1 done here + in the tooling draft §1
+   and ROADMAP. (Running `--all-used` on the real demo happens in the *sites* when they bump to v0.6.)
+
+### Phase 2 — slim core + `ssg init` (~v0.7.0, breaking — after sites eject)
+
+A. **Relocate defaults to `catalog/`.** Move `engine/components/*` (incl. `_layout`) →
+   `engine/catalog/*`; point `add`/`--all-used` at the catalog; stop build resolution from the (now
+   empty) engine `components/`. Make the bundled `example/` site `ssg add` its materials so it still
+   builds and the catalog stays CI-tested.
+B. **Not-installed error.** Resolution for an unowned name → a clear "not installed — run
+   `ssg add <name>`" error (instead of a silent miss).
+C. **`ssg init`.** The blank scaffold (files above) + `--template demo` (clone the demo repo).
+D. **Remove `--all-used`** (+ its detection lib if unused elsewhere); loud migration note; the bump.
+   Ship engine + both sites together (sites already own their materials from Phase 1).
