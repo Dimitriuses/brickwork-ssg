@@ -96,14 +96,25 @@ engine already supports via `:root` custom properties). A **material registry** 
 to its source (engine catalog vs an npm package vs a URL), so `ssg add <name>` can resolve beyond
 the built-in catalog.
 
+**Install mechanism — reuse `ssg add --all-used`.** The registry is the *source resolver*; the
+**install command is the one from §1**. Once a registry maps `name → source`, `ssg add --all-used`
+becomes a lightweight `npm install` for materials: **declare** a material (a registry entry + use it
+in a page), and `--all-used` **auto-installs** every used-but-missing material from wherever the
+registry says. `ssg add <name>` still *vendors* one material to own/edit it. So adding someone else's
+work is: drop in the registry entry, configure it, run `--all-used`. This is why §1 **keeps**
+`--all-used` permanent and leaves a `resolveSource(name)` **seam** for this phase to plug into
+(engine catalog → + npm/git/URL).
+
+**Attribution (the provenance stamp — moved here from §1).** The source (author / package / engine
+version) lives in each material's `<name>.json`. A material you only *install* keeps its author's
+credit (you're a **user** of it, not the owner); `ssg add <name>` gives you an editable copy, still
+stamped with its origin. So the stamp does double duty — dependency provenance **and** contributor
+credit — and unlocks tooling to **list a site's materials + who made them** and a future
+`ssg update <name>` (re-pull + diff). Deferred here because the stamp is only useful with the registry
+that reads it. See [slim-core-plan.md](slim-core-plan.md) → Notes ("Provenance / attribution stamp").
+
 **Depends on (1).** Only worth doing once the deploy/ownership model is proven on the in-engine
 catalog.
-
-**Provenance / material listing (moved here from §1).** Record where each deployed material came from
-(engine version / package) in the material's `<name>.json`, and add tooling to **list a site's
-materials + their source** (and a future `ssg update <name>`). Deferred to this phase because the
-stamp is only useful with the registry that reads it. See
-[slim-core-plan.md](slim-core-plan.md) → Notes ("Provenance stamp").
 
 **Open questions.**
 - Package convention (e.g. `brickwork-material-*` / a `brickwork.materials` field in `package.json`).
