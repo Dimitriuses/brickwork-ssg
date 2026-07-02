@@ -493,4 +493,20 @@ try {
   try { fs.rmSync(atmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// --- lib/components.js (shared resolver) + lib/used-materials.js (used-set walk) ---
+const { createComponents } = require('../lib/components');
+const C = createComponents({ siteRoot: siteDir, engineRoot: root });
+check('components: shared resolver — folder map + site-first resolution',
+  C.componentFolder('faqItem') === 'faq' && C.componentFolder('header') === 'header' &&
+  !!C.resolveComponentFile('header', 'header.html'));
+
+const { usedComponentNames } = require('../lib/used-materials');
+const uc = usedComponentNames({ siteRoot: siteDir, engineRoot: root });
+check('used-materials: finds referenced + always-on components',
+  ['header', 'footer', '_layout', 'products', 'carousel', 'faq', 'hero'].every(n => uc.used.includes(n)));
+check('used-materials: sub-components collapse to their parent folder (deploy folders)',
+  uc.used.includes('productCard') && uc.used.includes('faqItem') &&
+  uc.folders.includes('products') && uc.folders.includes('faq') &&
+  !uc.folders.includes('productCard') && !uc.folders.includes('faqItem'));
+
 done();

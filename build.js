@@ -5,6 +5,7 @@ const { slugify } = require('./lib/slugify');
 const { resolveGenerator } = require('./lib/generators');
 const { globToRegExp } = require('./lib/glob');
 const log = require('./lib/log');
+const { createComponents } = require('./lib/components');
 
 // Path roots. The engine (this script, components, lib, layout) is shared by
 // every site; the site being built is the current working directory. Splitting
@@ -100,82 +101,16 @@ function copyDirectory(src, dest) {
 // may also relocate a component's folder via an optional registry,
 // components/registry.json: { "<componentName>": "<folder under components/>" }.
 
-let _siteRegistry = null;
-function siteComponentRegistry() {
-  if (_siteRegistry) return _siteRegistry;
-  _siteRegistry = {};
-  const file = path.join(SITE_ROOT, 'components', 'registry.json');
-  if (fs.existsSync(file)) {
-    try {
-      _siteRegistry = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
-    } catch (error) {
-      log.warn(`Failed to parse components/registry.json: ${error.message}`, { phase: 'components' });
-    }
-  }
-  return _siteRegistry;
-}
-
-// Sub-component -> parent-folder map, built by scanning every component's
-// <name>.json for "subComponents": [...] across both roots (cached per build).
-// e.g. components/faq/faq.json { "subComponents": ["faqItem"] } => faqItem -> faq.
-let _subcomponentMap = null;
-function subcomponentMap() {
-  if (_subcomponentMap) return _subcomponentMap;
-  _subcomponentMap = {};                  // set before scanning to avoid recursion
-  for (const name of allComponentNames()) {
-    for (const sub of (readComponentConfig(name).subComponents || [])) {
-      _subcomponentMap[sub] = name;
-    }
-  }
-  return _subcomponentMap;
-}
-
-// The folder (under a components/ dir) that owns a component's files.
-function componentFolder(name) {
-  return subcomponentMap()[name] || name;
-}
-
-// Resolve one file of a component, site-first then engine; null if absent. A sub-component may
-// live in its own nested folder inside the parent (`<parent>/<subName>/<file>`); a flat file in
-// the parent folder (`<parent>/<subName>.<ext>`) still works (back-compat).
-function resolveComponentFile(name, filename) {
-  const parent = subcomponentMap()[name]; // set only for sub-components
-  const folder = parent || name;
-  const siteFolder = siteComponentRegistry()[folder] || folder;
-  const candidates = [];
-  if (parent) {
-    candidates.push(path.join(SITE_ROOT, 'components', siteFolder, name, filename));
-    candidates.push(path.join(COMPONENTS_DIR, folder, name, filename));
-  }
-  candidates.push(path.join(SITE_ROOT, 'components', siteFolder, filename));
-  candidates.push(path.join(COMPONENTS_DIR, folder, filename));
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  return null;
-}
-
-// A component's parsed JSON config ({ dependencies, ... }), site-first.
-function readComponentConfig(name) {
-  const file = resolveComponentFile(name, `${name}.json`);
-  if (!file) return { dependencies: [] };
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (error) {
-    log.warn(`Failed to parse ${name}.json: ${error.message}`, { phase: 'components', logger: name });
-    return { dependencies: [] };
-  }
-}
-
-// Every component name known across both roots (and the site registry).
-function allComponentNames() {
-  const names = new Set(Object.keys(siteComponentRegistry()));
-  for (const root of [COMPONENTS_DIR, path.join(SITE_ROOT, 'components')]) {
-    if (!fs.existsSync(root)) continue;
-    for (const e of fs.readdirSync(root, { withFileTypes: true })) {
-      if (e.isDirectory()) names.add(e.name);
-    }
-  }
-  return [...names];
-}
+// Component-resolution helpers now live in lib/components.js so `ssg add --all-used` resolves the
+// graph exactly as the build does (single source of truth). Bound to this build's roots + logger.
+const {
+  siteComponentRegistry,
+  subcomponentMap,
+  componentFolder,
+  resolveComponentFile,
+  readComponentConfig,
+  allComponentNames
+} = createComponents({ siteRoot: SITE_ROOT, engineRoot: ENGINE_ROOT, log });
 
 // Load a component template, resolving site overrides before the engine.
 function loadComponent(componentName) {
