@@ -35,7 +35,7 @@ component it uses — it copied them all during the v0.4 migration — so it's t
 | kind | creates | registry | flags |
 |---|---|---|---|
 | **`page <name>`** | `pages/<name>/<name>.{html,css,js,json}` (stubs); `.json` = `{ "page":"<name>", "title":"", "description":"", "header_theme":"", "layout":"_layout", "components":[] }` | — | `--layout=<x>` → sets `"layout":"<x>"` |
-| **`component <name>`** | `components/<name>/<name>.{html,css,js,json}` (empty stubs) | `--register` adds a `components/registry.json` entry | `--register` |
+| **`component <name>`** | `components/<name>/<name>.{html,css,js,json}` (minimal-placeholder stubs) | `--register` writes a `components/registry.json` entry (name → folder) | `--register`, `--folder=<dir>` |
 | **`generator <name>`** | `generators/generate-<name>.js` (a `generate(ctx, options)` stub) | **registers** in `generators/registry.json` (`<name> → generate-<name>.js`) | — |
 | **`builder <name>`** | `<name>.build.js` in the **existing** component `<name>`'s folder (a `build(vars, loadComponent, replaceVariables, helpers)` stub); **errors if the component doesn't exist** | — | — |
 | **`material <name>`** | **copies** the engine-catalog material into the site — all files, per-file gap-fill, drift-aware (*Phase 1, already built*) | — | `--all-used`, `--force`, `--dry-run` |
@@ -45,11 +45,16 @@ component it uses — it copied them all during the v0.4 migration — so it's t
 - `builder`: `function build(vars, loadComponent, replaceVariables, helpers) { /* return the component's HTML */ return replaceVariables(loadComponent('<name>'), vars); }` + `module.exports = { build };`
 - `page`/`component` `.html` a one-line placeholder/comment, `.css`/`.js` empty-or-comment, `.json` as above (`component`: `{}` or `{ "dependencies": [] }`).
 
+**`component` — `--register` + `--folder`** *(decided)*: `--folder=<dir>` places the component at
+`components/<dir>/` (instead of `components/<name>/`) and `--register` writes the
+`components/registry.json` entry `{ "<name>": "<dir>" }` so the build resolves it — the declaration
+knob you wanted for explicit control (and the seed of the §3 declared-materials registry). Without
+them a plain `component <name>` uses `components/<name>/` (discovered by folder, no entry needed).
+
 **Rules across kinds** (like `ng generate`): **never overwrite** an existing file unless `--force`;
 report each created/copied file + a summary through the logger; the tool **never commits**.
-Discovery: `page`/`component`/`builder` are found by folder/filename (no registry needed); `generator`
-**must** register (generators resolve by registry name); `component --register` is optional and only
-matters for a folder remap or the future declared-materials registry (§3).
+Discovery: `page`/`builder` are found by folder/filename (no registry); `generator` **must** register
+(generators resolve by registry name); `component` registers only with `--register`.
 
 > **What this changes for the built code.** The Phase-1 commits are the **`material` kind**:
 > `lib/deploy.js` (copy + drift), `lib/components.js` (shared resolver), `lib/used-materials.js`, and
@@ -250,22 +255,22 @@ Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) �
   bridge until §3 adds external (`external-material-design`) sources; the source lookup is a seam §3
   plugs into, not built now.
 
-## Open questions (the new scaffolding kinds)
+## Decided (scaffolding kinds)
 
-- **`--register` flag** (your "`--registers-force`"): confirm the name, and what it writes. For a
-  folder==name component a `registry.json` entry is redundant *today* (discovery is by folder), so is
-  it (a) a forward-looking explicit declaration for the §3 registry, (b) only useful with `--folder`
-  to remap, or (c) both? Also: does `generator` registering (which is *required*) share the same
-  `--register` plumbing?
-- **`page` default `layout`.** "Other keys present but empty" vs a working default — an empty
-  `"layout"` breaks the build. Ship `"layout":"_layout"` by default (overridden by `--layout`), or a
-  truly empty stub the author must fill? (Leaning `_layout`.)
-- **How much starter content** in `page`/`component` `.html`? A one-line placeholder that renders
-  something, or an empty file? (Leaning a minimal visible placeholder so a fresh page isn't blank.)
-- **The name `builder`.** It scaffolds a component's **build script** (`<name>.build.js`). Keep
-  `builder`, or call it `build-script` / `script`? (`builder` is short but overloaded elsewhere.)
-- **Stub source.** Inline template strings in `lib/scaffold.js` (simplest) vs an engine `templates/`
-  dir the stubs are read from (customisable, more moving parts). Leaning inline for now.
+- **`--register` + `--folder`** *(decided)*: a declaration knob for `component`, for explicit control.
+  `--folder=<dir>` sets the folder; `--register` writes the `components/registry.json` entry
+  (`name → folder`). It's the seed of the §3 declared-materials registry. `generator` registering is
+  *required* and separate (it writes `generators/registry.json`).
+- **`page` default `layout` = `_layout`** *(decided)*, overridden by `--layout=<x>`.
+- **Stubs are minimal visible placeholders** *(decided)* — a fresh `.html` renders *something*, not a
+  blank file.
+- **Keep `<name>.build.js`** *(decided)* — it's the build's search pattern today; the `builder` kind
+  scaffolds exactly that file. (Reworking the build-script mechanism itself is a future, separate job.)
+- **`--all-used` requires the kind** *(decided)*: `ssg add material --all-used` (consistency over the
+  shorter bare form).
+- **Stubs are built-in but centralised** *(decided)*: keep the templates inline in `lib/scaffold.js`,
+  but in **one clearly-marked place** (a `STUBS`/`templates` map at the top) so "where do I change the
+  starter content" has an obvious answer — no external `templates/` dir yet.
 
 *(Remaining slim-core/registry questions are §3-time — the registry interface, no-`.json` stamp home,
 trust boundary — parked in [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §3.)*
@@ -288,10 +293,12 @@ R1. **Kind dispatcher.** `ssg add <kind> <name>` in `cli.js` — `kind ∈ { pag
    path (`ssg add material <name>` / `ssg add material --all-used`). An unknown/missing kind → a clear
    usage error. Update the P1 `add` tests to the `material` form.
 R2. **`lib/scaffold.js` + `page` / `component`.** `scaffold(kind, name, { siteRoot, opts, dryRun })`
-   writes the stub files (never overwriting unless `--force`), returns `{ created }`. `page` → the
-   `pages/<name>/` stubs incl. the `.json` schema (+ `--layout`); `component` → the `components/<name>/`
-   empty stubs (+ `--register` → a `components/registry.json` entry). Tests: files created with the
-   right shape; refuses to clobber; `--dry-run` writes nothing.
+   writes the stub files from a **centralised `STUBS` map** (one obvious place to change starter
+   content), never overwriting unless `--force`, returns `{ created }`. `page` → `pages/<name>/` stubs
+   incl. the `.json` schema (`layout` = `--layout` or `_layout`); `component` → `components/<dir>/`
+   placeholder stubs, where `dir` = `--folder` or `<name>`, and `--register` writes the
+   `components/registry.json` `{ "<name>": "<dir>" }` entry. Tests: right shape; refuses to clobber;
+   `--folder`+`--register` places + registers; `--dry-run` writes nothing.
 R3. **`generator` + `builder`.** `generator <name>` → `generators/generate-<name>.js` (the
    `generate(ctx,options)` stub) **and** a `generators/registry.json` entry (`<name>`); `builder
    <name>` → `<name>.build.js` in the existing component `<name>`'s folder (the `build(...)` stub),
