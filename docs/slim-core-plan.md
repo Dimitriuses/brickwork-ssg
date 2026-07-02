@@ -196,15 +196,17 @@ Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) �
   re-pin the scaffold's engine to the version that ran `init`, backed by a CI gate that builds the
   demo against engine `main`; note-and-hold on drift/offline (see Notes).
 - **`example/` kept** as a self-deploying catalog showcase (not deleted).
+- **Drift is detected + reported** *(decided)*. `add`/`--all-used` compare each engine file against
+  the site's copy: **missing** → copy (gap-fill); **present + identical** → skip; **present +
+  differs** → **report drift** (don't silently overwrite; `--force` overwrites on purpose). So the
+  run's summary is `copied / skipped / drifted` — the drifted list tells you which owned files have
+  diverged from the engine.
+- **Source = the engine catalog, for now** *(decided)*. `--all-used` stays a pure component-migration
+  bridge until §3 adds external (`external-material-design`) sources; the source lookup is a seam §3
+  plugs into, not built now.
 
-## Residual open (small)
-
-- **Drift detection.** `--all-used` strictly gap-fills; should it *also* flag an already-owned file
-  that has drifted from the engine's current version (informational only), or stay silent?
-- **A used name the engine never had** (a purely site-authored component) — `--all-used` skips it
-  silently (already owned); confirm that's the wanted behaviour.
-- **Registry hand-off.** Exactly where `--all-used`'s source resolution stops being "engine catalog"
-  and calls into the §3 registry (npm/git/URL) — an interface to pin when §3 starts.
+*(Remaining questions are §3-time — the registry interface, no-`.json` stamp home, trust boundary —
+and are parked in [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §3.)*
 
 ## Implementation plan (commits)
 
@@ -213,11 +215,12 @@ coordinated breaking release, done *after* Phase 1 ships and the sites have run 
 
 ### Phase 1 — `ssg add` + `--all-used` (~v0.6.0, additive)
 
-1. **`lib/deploy.js` — the copy primitive.** `materialFiles(name)` (a component's engine files:
-   `<name>.html`, `<name>.build.js`, `<name>.json`, `style.css`, `script.js`, + nested sub-component
-   folders, honouring `registry.json` folder maps) and `deployMaterial(name, { siteRoot, force,
-   dryRun })` → per-file copy engine→site, skip existing unless `force`, return `{ copied, skipped }`.
-   Unit-tested against a temp site. No CLI yet.
+1. **`lib/deploy.js` — the copy primitive.** Walk a component's engine folder (`<name>.html`,
+   `<name>.build.js`, `<name>.json`, `style.css`, `script.js`, + nested sub-component folders) and,
+   per file, classify against the site copy: **missing** → copy, **identical** → skip, **differs** →
+   **drift** (don't overwrite unless `force`). `deployMaterial(name, { engineComponentsDir,
+   siteComponentsDir, force, dryRun })` → `{ copied, skipped, drifted }`. Unit-tested against a temp
+   site (copy / skip-identical / detect-drift / force-overwrite / dry-run writes nothing). No CLI yet.
 2. **`ssg add <name>` CLI.** New `add` command in `cli.js`: `configureLogging('add')`, deploy the
    named material via `lib/deploy`, `--force`/`--dry-run`, logger summary ("added N file(s)"); a name
    with no engine material → clear error. Tests: adds a component into a temp site; `--dry-run` writes
@@ -226,9 +229,11 @@ coordinated breaking release, done *after* Phase 1 ships and the sites have run 
    walk (page `components` + `{{COMPONENT}}` + `subComponents` + deps + `header`/`footer`/`_layout`)
    to compute the used set, then per file mark those that **resolve to the engine while the site
    lacks a copy**. Unit-tested on a fixture site that references + inherits a couple of components.
-4. **`ssg add --all-used`.** Orchestrate detection → `deployMaterial` per missing file → one summary;
-   `--dry-run`. Acceptance test: after `--all-used` on the fixture, a build with the engine's
-   `components/` temporarily hidden **still succeeds** (proves completeness); owned files untouched.
+4. **`ssg add --all-used`.** Orchestrate detection → `deployMaterial` over the used set → one summary
+   (`copied / skipped / drifted`, the drifted list surfaced as warnings); `--dry-run`. Acceptance
+   test: after `--all-used` on the fixture, a build with the engine's `components/` temporarily hidden
+   **still succeeds** (proves completeness); owned files untouched; a deliberately-edited owned file
+   shows up as **drift**.
 5. **Docs + README.** Document the `add` commands; mark Phase 1 done here + in the tooling draft §1
    and ROADMAP. (Running `--all-used` on the real demo happens in the *sites* when they bump to v0.6.)
 
