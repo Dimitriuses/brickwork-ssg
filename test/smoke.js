@@ -476,4 +476,21 @@ try {
   try { fs.rmSync(dtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// ssg add CLI integration (colour off in a pipe).
+const atmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwadd-'));
+const atmpArg = atmp.replace(/\\/g, '/');
+try {
+  const out = execSync(`node cli.js add carousel --site "${atmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  check('ssg add: deploys the material + summary',
+    /added 4 file\(s\) for "carousel"/.test(out) &&
+    fs.existsSync(path.join(atmp, 'components', 'carousel', 'carousel.html')));
+  let addExit = 0, addErr = '';
+  try { execSync(`node cli.js add nope-material --site "${atmpArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { addExit = e.status || 1; addErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('ssg add: unknown material errors (non-zero exit)',
+    addExit !== 0 && /no material "nope-material"/.test(addErr));
+} finally {
+  try { fs.rmSync(atmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
