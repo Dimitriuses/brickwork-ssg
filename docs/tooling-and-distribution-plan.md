@@ -25,6 +25,9 @@ structural change and the prerequisite for (2) and (3).
 
 ## 1. Material deploy commands & a slim core
 
+> **Detailed plan (with `ssg init`, as one two-phase task incl. an "eject" transition bridge):**
+> [slim-core-plan.md](slim-core-plan.md). The summary below stays roadmap-level.
+
 **Goal.** Turn "drop a same-named file into `components/` to override the engine" into an explicit
 **`ssg add <kind> <name>`** that scaffolds a material (component, generator, test, page) into the
 site from a **catalog**, *and* shrink the engine so it no longer ships the default/example
@@ -68,6 +71,8 @@ files go.
 ---
 
 ## 2. `ssg init`
+
+> Planned together with §1 as **Phase 2** of the two-phase task — see [slim-core-plan.md](slim-core-plan.md).
 
 **Goal.** Scaffold a working starting project: deploy a baseline set of materials + a minimal
 `config.json`, `pages/index/`, `assets/css/global.css`. Once the core is slim (1), a fresh `ssg
