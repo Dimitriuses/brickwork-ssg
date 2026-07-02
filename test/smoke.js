@@ -434,4 +434,46 @@ try {
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// --- lib/deploy.js: the material copy primitive (slim-core Phase 1, commit 1) ---
+const { deployMaterial } = require('../lib/deploy');
+const engineComponentsDir = path.join(root, 'components');
+const dtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwdeploy-'));
+try {
+  const siteComponentsDir = path.join(dtmp, 'components');
+  const carouselHtml = () => fs.readFileSync(path.join(siteComponentsDir, 'carousel', 'carousel.html'), 'utf8');
+
+  // Fresh deploy copies every engine file (incl. script.js), reports no drift, writes them.
+  const r1 = deployMaterial('carousel', { engineComponentsDir, siteComponentsDir });
+  check('deploy: fresh copy pulls all engine files',
+    r1.exists && r1.copied.includes('carousel.html') && r1.copied.includes('script.js') &&
+    r1.drifted.length === 0 && fs.existsSync(path.join(siteComponentsDir, 'carousel', 'carousel.build.js')));
+
+  // Re-run is idempotent: identical files are skipped, nothing copied.
+  const r2 = deployMaterial('carousel', { engineComponentsDir, siteComponentsDir });
+  check('deploy: identical files skipped (idempotent)',
+    r2.copied.length === 0 && r2.drifted.length === 0 && r2.skipped.includes('carousel.html'));
+
+  // An edited owned file is reported as drift and NOT overwritten.
+  fs.writeFileSync(path.join(siteComponentsDir, 'carousel', 'carousel.html'), 'EDITED');
+  const r3 = deployMaterial('carousel', { engineComponentsDir, siteComponentsDir });
+  check('deploy: drift detected + reported, not overwritten',
+    r3.drifted.includes('carousel.html') && carouselHtml() === 'EDITED');
+
+  // --force overwrites the drifted file.
+  const r4 = deployMaterial('carousel', { engineComponentsDir, siteComponentsDir, force: true });
+  check('deploy: --force overwrites drift', r4.drifted.includes('carousel.html') && carouselHtml() !== 'EDITED');
+
+  // --dry-run into a clean site reports the copies but writes nothing.
+  const dryDir = path.join(dtmp, 'dry', 'components');
+  const r5 = deployMaterial('carousel', { engineComponentsDir, siteComponentsDir: dryDir, dryRun: true });
+  check('deploy: --dry-run reports without writing',
+    r5.copied.includes('carousel.html') && !fs.existsSync(path.join(dryDir, 'carousel', 'carousel.html')));
+
+  // Unknown material -> exists:false, nothing copied.
+  const r6 = deployMaterial('does-not-exist', { engineComponentsDir, siteComponentsDir });
+  check('deploy: unknown material -> exists:false', r6.exists === false && r6.copied.length === 0);
+} finally {
+  try { fs.rmSync(dtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
