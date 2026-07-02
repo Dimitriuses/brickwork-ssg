@@ -1,10 +1,13 @@
-# Material deploy, slim core & `ssg init` — draft plan (for discussion)
+# `ssg add`, slim core & `ssg init` — draft plan (for discussion)
 
-> **Status: decisions locked; ready to build Phase 1.** Combines two roadmap items — **"Material
-> *deploy* commands & a slim core"** and **"`ssg init`"** — into **one task, two phases**, bridged by
-> a transitional `ssg add --all-used` so the breaking change lands safely. Detail for
-> [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §1–2. See **Decided** and the
-> **Implementation plan (commits)** below.
+> **Status: reframed (pre-merge).** `ssg add` was drafted as a *copy/deploy* tool; it should be a
+> **scaffolding command** (à la `ng generate`) that creates new material with starter stubs — with
+> *copying an existing engine material* as one **kind** (`material`). See the **command-model**
+> section below. The
+> Phase-1 code already built (`lib/deploy.js`, `--all-used`, the shared resolver) is **not wasted** —
+> it is the `material` kind; the rework is a rename + a kind dispatcher + four new scaffolders. Still
+> one task, two phases; detail for [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md)
+> §1–2.
 
 ## The problem
 
@@ -22,6 +25,37 @@ drops a default, every inheriting site loses that component and the build fails 
 ~8** materials (`header`, `footer`, `hero`, `products`/`productCard`, `faq`/`faqItem`, `contactIcons`,
 `_layout`). Under a naive slim core it would break outright. (The **private** site already owns every
 component it uses — it copied them all during the v0.4 migration — so it's the "already-ejected" case.)
+
+## `ssg add <kind> <name>` — the command model (revised)
+
+`ssg add` is a **scaffolding + adoption** command. The **kind** picks the behaviour — mental model:
+**author new** (`page` / `component` / `generator` / `builder`, created with starter stubs) vs
+**adopt existing** (`material`, copied from the engine catalog — the Phase-1 work).
+
+| kind | creates | registry | flags |
+|---|---|---|---|
+| **`page <name>`** | `pages/<name>/<name>.{html,css,js,json}` (stubs); `.json` = `{ "page":"<name>", "title":"", "description":"", "header_theme":"", "layout":"_layout", "components":[] }` | — | `--layout=<x>` → sets `"layout":"<x>"` |
+| **`component <name>`** | `components/<name>/<name>.{html,css,js,json}` (empty stubs) | `--register` adds a `components/registry.json` entry | `--register` |
+| **`generator <name>`** | `generators/generate-<name>.js` (a `generate(ctx, options)` stub) | **registers** in `generators/registry.json` (`<name> → generate-<name>.js`) | — |
+| **`builder <name>`** | `<name>.build.js` in the **existing** component `<name>`'s folder (a `build(vars, loadComponent, replaceVariables, helpers)` stub); **errors if the component doesn't exist** | — | — |
+| **`material <name>`** | **copies** the engine-catalog material into the site — all files, per-file gap-fill, drift-aware (*Phase 1, already built*) | — | `--all-used`, `--force`, `--dry-run` |
+
+**Starter stub contents (tunable):**
+- `generator`: `module.exports = { generate(ctx, options) { /* return [{ slug, title, description, vars }] per item */ return []; } };`
+- `builder`: `function build(vars, loadComponent, replaceVariables, helpers) { /* return the component's HTML */ return replaceVariables(loadComponent('<name>'), vars); }` + `module.exports = { build };`
+- `page`/`component` `.html` a one-line placeholder/comment, `.css`/`.js` empty-or-comment, `.json` as above (`component`: `{}` or `{ "dependencies": [] }`).
+
+**Rules across kinds** (like `ng generate`): **never overwrite** an existing file unless `--force`;
+report each created/copied file + a summary through the logger; the tool **never commits**.
+Discovery: `page`/`component`/`builder` are found by folder/filename (no registry needed); `generator`
+**must** register (generators resolve by registry name); `component --register` is optional and only
+matters for a folder remap or the future declared-materials registry (§3).
+
+> **What this changes for the built code.** The Phase-1 commits are the **`material` kind**:
+> `lib/deploy.js` (copy + drift), `lib/components.js` (shared resolver), `lib/used-materials.js`, and
+> `ssg add --all-used`. The rework: make `ssg add` **dispatch on the kind** (`ssg add material <name>`
+> / `ssg add material --all-used`), and add `lib/scaffold.js` + the four author-new kinds. Everywhere
+> below, "deploy / the bridge / `ssg add`" now means the **`material`** kind.
 
 ## Your idea: an eject bridge that becomes the install command — endorsed
 
@@ -173,15 +207,26 @@ Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) �
   (deploying what it uses) must build every CI run — that's what keeps the catalog honest.
 - **Idempotency + git hygiene.** `add`/`--all-used` write only; re-running is safe; the tool never
   commits.
-- **Staged, not scope-crept.** Phase 1 `--all-used` copies *local* engine-catalog materials only.
-  The third-party/npm/registry generalisation is **deliberately §3**, not now — but design the Phase-1
-  source lookup with a **seam** (a `resolveSource(name) → path` step), so §3 can add npm/git/URL
-  resolvers without rewriting `--all-used`. Don't hardcode "the engine catalog" as the only possible
-  source.
+- **Staged, not scope-crept.** Phase 1 `material --all-used` copies *local* engine-catalog materials
+  only. The third-party/npm/registry generalisation is **deliberately §3**, not now — but design the
+  Phase-1 source lookup with a **seam** (a `resolveSource(name) → path` step), so §3 can add
+  npm/git/URL resolvers without rewriting it. Don't hardcode "the engine catalog" as the only source.
+- **`component` (scaffold empty) vs `material` (copy engine) will confuse people.** Both make a
+  `components/<name>/` folder — one *empty for you to author*, one *a real engine copy*. Document the
+  split loudly (author-new vs adopt-existing), and have each command's summary say which it did.
+- **Overwrite safety across all kinds.** A scaffolder must **refuse to clobber** an existing
+  page/component/generator/builder file (clear error) unless `--force` — same rule as `material`
+  drift. `ng generate` erroring on a clash is the model.
+- **`ssg init` should reuse the scaffolders.** A blank `init` ≈ `add page index` + a `_layout` + a
+  `config.json`/`package.json` seed. Build the scaffolders so `init` composes them rather than
+  duplicating stub content.
 
 ## Decided
 
-- **Bridge command:** **`ssg add --all-used`** — a flag on the permanent `ssg add`, not a separate verb.
+- **`ssg add <kind> <name>` is a scaffolding command** (`ng generate`-style) with five kinds —
+  `page` / `component` / `generator` / `builder` create new material with stubs; **`material`** copies
+  an engine-catalog material (the Phase-1 work). See the command-model section.
+- **Bridge command:** **`ssg add material --all-used`** — a flag on the `material` kind, not a separate verb.
 - **"Used" detection:** **build resolution** — the site's actual component graph, per file, site-first.
 - **Scope:** **components + `_layout`** (the engine ships no default generators, so nothing else).
 - **`_layout`:** a **deployable catalog component** (not kept in core; not a new "page" material kind).
@@ -205,42 +250,56 @@ Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) �
   bridge until §3 adds external (`external-material-design`) sources; the source lookup is a seam §3
   plugs into, not built now.
 
-*(Remaining questions are §3-time — the registry interface, no-`.json` stamp home, trust boundary —
-and are parked in [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §3.)*
+## Open questions (the new scaffolding kinds)
+
+- **`--register` flag** (your "`--registers-force`"): confirm the name, and what it writes. For a
+  folder==name component a `registry.json` entry is redundant *today* (discovery is by folder), so is
+  it (a) a forward-looking explicit declaration for the §3 registry, (b) only useful with `--folder`
+  to remap, or (c) both? Also: does `generator` registering (which is *required*) share the same
+  `--register` plumbing?
+- **`page` default `layout`.** "Other keys present but empty" vs a working default — an empty
+  `"layout"` breaks the build. Ship `"layout":"_layout"` by default (overridden by `--layout`), or a
+  truly empty stub the author must fill? (Leaning `_layout`.)
+- **How much starter content** in `page`/`component` `.html`? A one-line placeholder that renders
+  something, or an empty file? (Leaning a minimal visible placeholder so a fresh page isn't blank.)
+- **The name `builder`.** It scaffolds a component's **build script** (`<name>.build.js`). Keep
+  `builder`, or call it `build-script` / `script`? (`builder` is short but overloaded elsewhere.)
+- **Stub source.** Inline template strings in `lib/scaffold.js` (simplest) vs an engine `templates/`
+  dir the stubs are read from (customisable, more moving parts). Leaning inline for now.
+
+*(Remaining slim-core/registry questions are §3-time — the registry interface, no-`.json` stamp home,
+trust boundary — parked in [tooling-and-distribution-plan.md](tooling-and-distribution-plan.md) §3.)*
 
 ## Implementation plan (commits)
 
 `npm test` green after each. **Phase 1** is the actionable near-term work; **Phase 2** is a
 coordinated breaking release, done *after* Phase 1 ships and the sites have run `--all-used`.
 
-### Phase 1 — `ssg add` + `--all-used` (~v0.6.0, additive)
+### Phase 1 — the full `ssg add <kind> <name>` command (~v0.6.0, additive)
 
-> **Built on branch `feat/deploy`** (`npm test` green each commit, 109 checks): **1** `lib/deploy.js`
-> (copy primitive + drift); **2** `ssg add <name>` CLI; **3** extracted the shared `lib/components.js`
-> resolver + `lib/used-materials.js`; **4** `ssg add --all-used` (+ acceptance test). **5** = this docs
-> pass. The engine still ships every default, so it's additive/opt-in.
+**Already built on `feat/deploy` = the `material` kind** (`npm test` green each commit, 109 checks):
+`lib/deploy.js` (copy + drift), the shared `lib/components.js` resolver, `lib/used-materials.js`, and
+`ssg add --all-used`. Kept as-is; just re-homed under `material`.
 
-1. **`lib/deploy.js` — the copy primitive.** Walk a component's engine folder (`<name>.html`,
-   `<name>.build.js`, `<name>.json`, `style.css`, `script.js`, + nested sub-component folders) and,
-   per file, classify against the site copy: **missing** → copy, **identical** → skip, **differs** →
-   **drift** (don't overwrite unless `force`). `deployMaterial(name, { engineComponentsDir,
-   siteComponentsDir, force, dryRun })` → `{ copied, skipped, drifted }`. Unit-tested against a temp
-   site (copy / skip-identical / detect-drift / force-overwrite / dry-run writes nothing). No CLI yet.
-2. **`ssg add <name>` CLI.** New `add` command in `cli.js`: `configureLogging('add')`, deploy the
-   named material via `lib/deploy`, `--force`/`--dry-run`, logger summary ("added N file(s)"); a name
-   with no engine material → clear error. Tests: adds a component into a temp site; `--dry-run` writes
-   nothing; `--force` overwrites.
-3. **`lib/used-materials.js` — used-inherited detection.** Extract/reuse the build's component-graph
-   walk (page `components` + `{{COMPONENT}}` + `subComponents` + deps + `header`/`footer`/`_layout`)
-   to compute the used set, then per file mark those that **resolve to the engine while the site
-   lacks a copy**. Unit-tested on a fixture site that references + inherits a couple of components.
-4. **`ssg add --all-used`.** Orchestrate detection → `deployMaterial` over the used set → one summary
-   (`copied / skipped / drifted`, the drifted list surfaced as warnings); `--dry-run`. Acceptance
-   test: after `--all-used` on the fixture, a build with the engine's `components/` temporarily hidden
-   **still succeeds** (proves completeness); owned files untouched; a deliberately-edited owned file
-   shows up as **drift**.
-5. **Docs + README.** Document the `add` commands; mark Phase 1 done here + in the tooling draft §1
-   and ROADMAP. (Running `--all-used` on the real demo happens in the *sites* when they bump to v0.6.)
+**Rework + new kinds (pre-merge, on the same branch):**
+
+R1. **Kind dispatcher.** `ssg add <kind> <name>` in `cli.js` — `kind ∈ { page, component, generator,
+   builder, material }`; positionals become `[kind, name]`. Route `material` to the existing deploy
+   path (`ssg add material <name>` / `ssg add material --all-used`). An unknown/missing kind → a clear
+   usage error. Update the P1 `add` tests to the `material` form.
+R2. **`lib/scaffold.js` + `page` / `component`.** `scaffold(kind, name, { siteRoot, opts, dryRun })`
+   writes the stub files (never overwriting unless `--force`), returns `{ created }`. `page` → the
+   `pages/<name>/` stubs incl. the `.json` schema (+ `--layout`); `component` → the `components/<name>/`
+   empty stubs (+ `--register` → a `components/registry.json` entry). Tests: files created with the
+   right shape; refuses to clobber; `--dry-run` writes nothing.
+R3. **`generator` + `builder`.** `generator <name>` → `generators/generate-<name>.js` (the
+   `generate(ctx,options)` stub) **and** a `generators/registry.json` entry (`<name>`); `builder
+   <name>` → `<name>.build.js` in the existing component `<name>`'s folder (the `build(...)` stub),
+   **erroring if the component doesn't exist**. Tests: files + registry entry; builder errors on a
+   missing component; neither clobbers.
+R4. **Docs + README.** Document `ssg add <kind> <name>` (all five kinds); mark Phase 1 done here + in
+   the tooling draft §1 and ROADMAP. (Running `material --all-used` on the real demo happens in the
+   *sites* when they bump to v0.6.)
 
 ### Phase 2 — slim core + `ssg init` (~v0.7.0, breaking — after sites eject)
 
