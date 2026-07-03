@@ -343,6 +343,12 @@ function buildPage(pageConfig, pageName) {
     // to 'light') and passes that to the body attribute + the header — so the mode lives with the
     // layout, not as build-wide global processing here.
     HEADER_THEME: pageData.header_theme,
+    // The collected component CSS <link> tags (in <head>) and JS <script> tags (end of <body>).
+    // {{CSS_LINKS}}/{{JS_SCRIPTS}} are the self-describing names; {{HEAD_EXTRA}}/{{BODY_EXTRA}} are
+    // kept as **deprecated aliases** (same value) so existing site layouts keep working — to be
+    // dropped in a future release.
+    CSS_LINKS: raw(cssLinks),
+    JS_SCRIPTS: raw(jsScripts),
     HEAD_EXTRA: raw(cssLinks),
     BODY_EXTRA: raw(jsScripts)
   };

@@ -731,4 +731,25 @@ try {
   try { fs.rmSync(vtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// {{CSS_LINKS}}/{{JS_SCRIPTS}} are the self-describing names for the collected CSS/JS tags;
+// {{HEAD_EXTRA}}/{{BODY_EXTRA}} remain as deprecated aliases (same value) so existing layouts work.
+const btmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwalias-'));
+const btmpArg = btmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(btmp, p)), { recursive: true }); fs.writeFileSync(path.join(btmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'A' }, nav: [] }));
+  mk('assets/css/global.css', '/* g */');
+  mk('assets/js/global.js', '// g');
+  mk('components/_layout/_layout.html', '<!doctype html><html><head>NEW:{{CSS_LINKS}} OLD:{{HEAD_EXTRA}}</head><body>{{CONTENT}} NEW:{{JS_SCRIPTS}} OLD:{{BODY_EXTRA}}</body></html>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main>x</main>');
+  fs.mkdirSync(path.join(btmp, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${btmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const out = fs.readFileSync(path.join(btmp, 'build', 'index.html'), 'utf8');
+  check('{{CSS_LINKS}}/{{JS_SCRIPTS}} + deprecated {{HEAD_EXTRA}}/{{BODY_EXTRA}} aliases both fill',
+    (out.match(/assets\/css\/global\.css/g) || []).length === 2 && (out.match(/assets\/js\/global\.js/g) || []).length === 2);
+} finally {
+  try { fs.rmSync(btmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();

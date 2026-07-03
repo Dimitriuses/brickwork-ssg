@@ -31,8 +31,9 @@ In your site's `components/_layout/_layout.html`:
 
 That's the whole change for a typical layout — one line each. `{{HEADER}}`/`{{FOOTER}}` are no longer
 provided, so left as-is they render as **literal text** with no header/footer (see the caveat in
-Step 3). Everything else in your `_layout.html` (`{{CONTENT}}`, `{{PAGE_TITLE}}`, `{{HEADER_MODE}}`,
-`{{HEAD_EXTRA}}`, `{{BODY_EXTRA}}`, …) is unchanged.
+Step 3). Everything else in your `_layout.html` (`{{CONTENT}}`, `{{PAGE_TITLE}}`, `{{HEADER_MODE}}`, …)
+is unchanged — including `{{HEAD_EXTRA}}`/`{{BODY_EXTRA}}`, now **deprecated aliases** for the
+self-describing `{{CSS_LINKS}}`/`{{JS_SCRIPTS}}` (both fill; prefer the new names in new layouts).
 
 You do **not** need to add a `_layout.json` or `_layout.build.js` — the engine's copies are resolved
 **per file, site-first**, so overriding only `_layout.html` inherits the engine's dependency

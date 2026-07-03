@@ -66,7 +66,7 @@ fail the build).
 
 **Status.** ✅ Fixed (`{{COMPONENT}}` build-fatal; `{{VAR}}` warns at build, fails at test).
 
-## Rename the layout's built-asset vars `{{HEAD_EXTRA}}` / `{{BODY_EXTRA}}`
+## ✅ Rename the layout's built-asset vars `{{HEAD_EXTRA}}` / `{{BODY_EXTRA}}` *(fixed)*
 
 **Symptom.** The layout placeholders `{{HEAD_EXTRA}}` (in `<head>`) and `{{BODY_EXTRA}}` (end of
 `<body>`) don't say what they hold: the engine fills them with the **built component CSS `<link>`
@@ -76,13 +76,16 @@ tags** and **JS `<script>` tags** respectively (`build.js`: `HEAD_EXTRA: raw(css
 **Why it matters.** Clarity for layout authors — the names should reflect that these are the collected
 CSS/JS link/script tags, not arbitrary extra markup.
 
-**Fix (sketch).** Rename to self-describing names — suggested **`{{CSS_LINKS}}`** and
-**`{{JS_SCRIPTS}}`** (they also match the internal `cssLinks` / `jsScripts`); alternatives
-`{{STYLE_LINKS}}` / `{{SCRIPT_TAGS}}`. **Coordinated rename:** the engine `_layout.html` *and* both
-sites' `_layout.html` overrides use the current names, so change them together (or accept both names
-for one release, then drop the old).
+**Fix.** ✅ Done (`fix/known-issues`) — **non-breaking**, via the "both names for one release" path.
+`buildPage` now fills **`{{CSS_LINKS}}`** and **`{{JS_SCRIPTS}}`** (the self-describing names, matching
+the internal `cssLinks`/`jsScripts`) and keeps `{{HEAD_EXTRA}}`/`{{BODY_EXTRA}}` as **deprecated
+aliases** (same value). The engine's shipped templates — the catalog `_layout.html` and the `ssg init`
+layout stub — use the new names; the test fixtures (and the sites) stay on the old names to prove the
+aliases still fill. So nothing breaks; sites migrate at leisure. A smoke check asserts a layout using
+*both* names fills both. **To finish later:** migrate the sites' `_layout.html` to the new names, then
+drop the aliases in a future (breaking) release.
 
-**Status.** Open.
+**Status.** ✅ Fixed (new names shipped; old names deprecated-but-working).
 
 ## ✅ Build crashes hard if a site has no `assets/images/` *(fixed)*
 
