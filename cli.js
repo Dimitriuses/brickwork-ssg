@@ -122,7 +122,7 @@ if (command === 'add') {
     const engineCatalogDir = path.join(__dirname, 'catalog');
     const deployOpts = {
       engineComponentsDir: engineCatalogDir,
-      siteComponentsDir: path.join(siteRoot, 'components'),
+      siteComponentsDir: require('./lib/dirs').siteDirs(siteRoot).components, // configurable via `dirs`
       force: flags.force,
       dryRun: flags.dryRun
     };

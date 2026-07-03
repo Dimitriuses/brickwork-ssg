@@ -769,6 +769,13 @@ try {
   check('config.json `dirs` relocates pages/components/assets + the output dir',
     /SRC-LAYOUT-OK/.test(out) && /assets\/css\/global\.css/.test(out) &&
     fs.existsSync(path.join(dirtmp, 'dist', 'assets', 'css', 'global.css')));
+  // `ssg add` (scaffold + material) also writes into the configured dirs, not the root defaults.
+  execSync(`node cli.js add page about --site "${dirtmpArg}"`, { cwd: root, stdio: 'pipe' });
+  execSync(`node cli.js add material carousel --site "${dirtmpArg}"`, { cwd: root, stdio: 'pipe' });
+  check('config.json `dirs`: ssg add scaffolds + deploys into the configured dirs',
+    fs.existsSync(path.join(dirtmp, 'src', 'pages', 'about', 'about.json')) &&
+    fs.existsSync(path.join(dirtmp, 'src', 'components', 'carousel', 'carousel.html')) &&
+    !fs.existsSync(path.join(dirtmp, 'pages')));
 } finally {
   try { fs.rmSync(dirtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
