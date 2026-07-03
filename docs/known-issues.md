@@ -4,6 +4,31 @@ A running log of bugs and structural inconsistencies, so they aren't forgotten. 
 entries at the top; keep each short — symptom, why it matters, a sketch of the fix, status. Resolved
 entries stay as a record, marked ✅ Fixed.
 
+## `{{COMPONENT:x}}` in page CONTENT is expanded by the layout pass (commented / undeclared too) — v0.6.0 regression
+
+**Symptom.** A `{{COMPONENT:name}}` that appears in a page's **content** but isn't resolved during the
+content build — because `name` isn't in the page's `components` array, or the placeholder is **commented
+out** (`<!-- {{COMPONENT:faq}} -->`) — is now **expanded anyway**. Since v0.6.0 the layout renders through
+`buildComponent`, whose `{{COMPONENT:…}}` scan runs over the layout HTML *after* the page content has been
+injected into `{{CONTENT}}` — so leftover `{{COMPONENT:x}}` in the content get picked up and built. At
+v0.5.1 the layout was filled with `replaceVariables` (no `{{COMPONENT}}` scan), so those leftovers stayed
+literal/inert. Found migrating the private site to v0.6.0: `<!-- {{COMPONENT:faq}} -->` (faq deliberately
+disabled on that page) rendered the faq, and the faq HTML's own `<!-- … -->` comments closed the author's
+comment early — exposing unfilled `{{FAQ_*}}` vars (a failing `ssg test`).
+
+**Why it matters.** "Comment out a component to disable it" silently breaks, and an undeclared inline
+`{{COMPONENT:x}}` renders `x` without the page's vars. It's a behavior change from v0.5.1 that can turn a
+clean site into broken output on the v0.6.0 bump.
+
+**Fix (sketch).** The layout's `buildComponent` pass should not re-scan the injected `{{CONTENT}}` for
+`{{COMPONENT}}` — the content's components are already resolved during the content build; leftover
+placeholders in content should stay literal (as before). Options: inject `CONTENT` *after* the layout's
+`{{COMPONENT}}` scan, or mark the raw `CONTENT` value opaque to the scan. Needs care around the raw-inject
++ scan order. Workaround applied to both sites during migration: neutralize commented `{{COMPONENT:x}}`
+placeholders.
+
+**Status.** Open (v0.6.0 regression; sites worked around it at migration time).
+
 ## `ssg build` doesn't catch unresolved `{{VAR}}` / `{{COMPONENT}}` — only `ssg test` does
 
 **Symptom.** When a template leaves a placeholder unresolved — e.g. a custom `_layout.html` still
