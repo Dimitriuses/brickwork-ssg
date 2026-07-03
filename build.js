@@ -381,14 +381,11 @@ function buildPage(pageConfig, pageName) {
     }
   });
 
-  // Build header based on theme
+  // The page's header theme, exposed to the layout (and, through it, the header component) as
+  // HEADER_MODE. header/footer are now rendered by the layout via {{COMPONENT:header/footer}} —
+  // declared as its dependencies in _layout.json — not built + injected here.
   const headerMode = pageData.header_theme || 'light';
-  // const headerTemplate = headerMode === 'dark' ? 'header-dark' : 'header-light';
-  const headerHtml = buildComponent("header", flatConfig);
-  
-  // Build footer
-  const footerHtml = buildComponent('footer', flatConfig);
-  
+
   // Collect all CSS files (including page-specific). `assetsFrom`, set on generated
   // pages from a template, links the template page's own asset.
   const cssFiles = collectComponentCSS(pageData.components || [], pageData.page, pageData.assetsFrom);
@@ -408,9 +405,7 @@ function buildPage(pageConfig, pageName) {
     PAGE_TITLE: pageData.title || flatConfig.SITE_NAME,
     PAGE_DESCRIPTION: pageData.description || flatConfig.SITE_DESCRIPTION,
     SITE_NAME: flatConfig.SITE_NAME,
-    HEADER: raw(headerHtml),       // pre-built HTML fragments - insert verbatim
     CONTENT: raw(mainContent),
-    FOOTER: raw(footerHtml),
     HEADER_MODE: headerMode,
     HEAD_EXTRA: raw(cssLinks),
     BODY_EXTRA: raw(jsScripts)
@@ -586,8 +581,8 @@ function expandTemplatePage(templateFile, templateConfig) {
 // page-specific asset. `kind` is 'css' or 'js'; they differ only in the source
 // filename and which base components are always included.
 const ASSET_KINDS = {
-  css: { sourceFile: 'style.css', base: ['header', 'footer'] },
-  js: { sourceFile: 'script.js', base: ['header'] }
+  css: { sourceFile: 'style.css', base: ['_layout'] },
+  js: { sourceFile: 'script.js', base: ['_layout'] }
 };
 
 function collectComponentAssets(kind, components, pageName, assetBase) {

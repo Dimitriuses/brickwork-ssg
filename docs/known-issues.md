@@ -38,7 +38,7 @@ optional copies; a one-liner, low risk. (`ssg init` should also seed the folder.
 
 **Status.** Open.
 
-## Header/footer are hard-wired globally, not linked to `_layout`
+## ✅ Header/footer are hard-wired globally, not linked to `_layout` *(fixed)*
 
 **Symptom.** `header` and `footer` are separate components, but nothing *declares* that the layout
 uses them — the wiring is hardcoded in two places: (1) **rendering** — `buildPage` always does
@@ -52,14 +52,21 @@ special-cased rather than declared. A layout that doesn't want a header/footer s
 bundled, and a layout can't express "I depend on header + footer" the way any other component declares
 `dependencies`/`subComponents`.
 
-**Fix (sketch, later).** Now that `_layout` renders through `buildComponent`, the layout can place
-`{{COMPONENT:header}}` / `{{COMPONENT:footer}}` and declare `"dependencies": ["header","footer"]` in a
-`_layout.json`; `buildPage` drops the hardcoded header/footer build + vars, and `ASSET_KINDS.base`
-drops them (the asset walk picks them up via the layout's dependencies once `_layout` is in the walk).
-**Watch-outs:** the per-page `header_theme` reaches the header via the body `data-header-mode`
-attribute + a `HEADER_MODE` var — that path must be preserved (pass the theme as a component var); and
-this **changes rendering**, so it is *not* byte-identical like the seam fix and needs its own careful
-diff. Bigger than the `_layout` fix — track separately.
+**Fix.** ✅ Done (branch `fix/header-footer-deps`). The engine `_layout.html` now places
+`{{COMPONENT:header}}` / `{{COMPONENT:footer}}` and declares `"dependencies": ["header","footer"]` in a
+new `_layout.json`; `buildPage` no longer builds header/footer or injects `{{HEADER}}`/`{{FOOTER}}`
+vars, and `ASSET_KINDS.base` is now `['_layout']` (header/footer bundle via the layout's dependencies).
+The per-page `header_theme` still reaches the header: it's passed as `HEADER_MODE` in the layout's
+vars, so `{{COMPONENT:header}}` — built with those vars — fills `data-navbar-style`. Output is
+**content-identical** for the example (a whole-tree diff shows no change but working-tree line
+endings). A smoke check guards that the header receives the theme.
+
+**⚠️ Breaking for sites with a custom `_layout.html`.** A site override that still uses
+`{{HEADER}}`/`{{FOOTER}}` gets literal placeholders (no header/footer) once it bumps to this engine —
+and `ssg build` won't flag it (the unresolved-`{{VAR}}` check only runs in `ssg test`). **Both sites**
+(private + demo) override `_layout.html`, so each needs a one-line-each swap
+(`{{HEADER}}`→`{{COMPONENT:header}}`, `{{FOOTER}}`→`{{COMPONENT:footer}}`) in the same commit that
+bumps their engine submodule.
 
 **Status.** Open. Enabled by the `_layout`-as-component fix; deliberately not bundled into it.
 

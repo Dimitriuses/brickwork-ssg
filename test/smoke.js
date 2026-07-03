@@ -49,6 +49,10 @@ const index = fs.existsSync(path.join(buildDir, 'index.html'))
 check('index.html exists', fs.existsSync(path.join(buildDir, 'index.html')));
 check('layout: <header> present', index.includes('<header'));
 check('layout: <footer> present', index.includes('<footer'));
+// Header/footer render via {{COMPONENT:header/footer}} (declared _layout dependencies); the per-page
+// header_theme reaches the header component as HEADER_MODE -> data-navbar-style.
+check('layout: header component receives the theme (HEADER_MODE via {{COMPONENT:header}})',
+  /<header[^>]*data-navbar-style="(light|dark)"/.test(index));
 
 // Phase A: a site-authored component (example/components/pricing) renders with
 // its own template + build logic + CSS, resolved site-first by the engine.
