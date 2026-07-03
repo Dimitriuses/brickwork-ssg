@@ -3,7 +3,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { raw } = require('../../lib/html');
+// Self-contained: engine helpers come from the 4th `helpers` arg, so a deployed copy needs no
+// engine lib/ on a relative path.
 
 /**
  * Build the FAQ component
@@ -12,7 +13,7 @@ const { raw } = require('../../lib/html');
  * @param {function} replaceVariables - Function to replace variables in template
  * @returns {string} - Compiled HTML
  */
-function build(vars, loadComponent, replaceVariables) {
+function build(vars, loadComponent, replaceVariables, { raw }) {
   // Load the faqItem template
   const faqItemTemplate = loadComponent('faqItem');
   

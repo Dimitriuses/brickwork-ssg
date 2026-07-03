@@ -2,6 +2,13 @@
 build/
 example/build/
 
+# Slim core: the example is a self-deploying catalog showcase — it `ssg add material --all-used`s the
+# catalog materials it uses at build/test time (docs/slim-core-plan.md). Those deployed folders are
+# regenerated, not committed; only example-authored materials stay tracked.
+example/components/*
+!example/components/blocks/
+!example/components/registry.json
+
 # Log output (per-run files from the planned file sink; see docs/terminal-ux-plan.md)
 log/
 example/log/

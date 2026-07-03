@@ -25,6 +25,18 @@ function done() {
 }
 
 console.log('Smoke test: building example/ site...');
+// Slim core: the example owns only its authored materials (blocks/pricing); it self-deploys the
+// catalog materials it uses before building — the "self-deploying showcase" that keeps the catalog
+// exercised every run. Deployed folders are gitignored, not committed.
+let deployOk = true;
+try {
+  execSync('node cli.js add material --all-used --site example', { cwd: root, stdio: 'pipe' });
+} catch (e) {
+  deployOk = false;
+  process.stderr.write(((e.stdout || '') + '') + ((e.stderr || '') + ''));
+}
+check('example self-deploys its catalog materials', deployOk);
+
 let buildOk = true;
 let buildOut = '';
 try {
@@ -440,7 +452,7 @@ try {
 
 // --- lib/deploy.js: the material copy primitive (slim-core Phase 1, commit 1) ---
 const { deployMaterial } = require('../lib/deploy');
-const engineComponentsDir = path.join(root, 'components');
+const engineComponentsDir = path.join(root, 'catalog'); // deployable materials live in the catalog now
 const dtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwdeploy-'));
 try {
   const siteComponentsDir = path.join(dtmp, 'components');

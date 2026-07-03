@@ -79,9 +79,11 @@ if (command === 'add') {
 
   if (kind === 'material') {
     // Adopt an existing engine-catalog material: copy it into the site (per-file gap-fill, drift-aware).
+    // The deployable source is the engine `catalog/` (not the build's slim `components/`).
     const { deployMaterial } = require('./lib/deploy');
+    const engineCatalogDir = path.join(__dirname, 'catalog');
     const deployOpts = {
-      engineComponentsDir: path.join(__dirname, 'components'),
+      engineComponentsDir: engineCatalogDir,
       siteComponentsDir: path.join(siteRoot, 'components'),
       force: flags.force,
       dryRun: flags.dryRun
@@ -99,7 +101,7 @@ if (command === 'add') {
     if (flags.allUsed) {
       // Own every material this site uses but inherits from the engine (the migration bridge).
       const { usedComponentNames } = require('./lib/used-materials');
-      const { folders } = usedComponentNames({ siteRoot, engineRoot: __dirname, log });
+      const { folders } = usedComponentNames({ siteRoot, engineRoot: __dirname, engineComponentsDir: engineCatalogDir, log });
       let copied = 0, drifted = 0, materials = 0;
       for (const folder of folders) {
         const res = deployMaterial(folder, deployOpts);

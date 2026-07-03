@@ -4,9 +4,9 @@
 // footer's own link markup. {{COMPONENT:contactIcons}} is resolved afterwards
 // by buildComponent.
 
-const { raw, escapeHtml } = require('../../lib/html');
-
-function build(vars, loadComponent, replaceVariables) {
+// Self-contained: engine helpers come from the 4th `helpers` arg, so a deployed copy needs no
+// engine lib/ on a relative path.
+function build(vars, loadComponent, replaceVariables, { raw, escapeHtml }) {
   const navItems = Array.isArray(vars.NAV) ? vars.NAV : [];
 
   const linksHtml = navItems.map(item =>

@@ -4,9 +4,11 @@
 // raw files under build/ - keeps the grid correct when data files are not copied into the output
 // (data_model `copy: false`): image paths come from the model's `images` part, and name/price/
 // description from its `data` part.
-const { raw, escapeHtml } = require('../../lib/html');
+// Self-contained: engine helpers (raw/escapeHtml/collection/log) come from the 4th `helpers` arg,
+// so a deployed copy needs no engine lib/ on a relative path.
 
 function build(vars, loadComponent, replaceVariables, helpers) {
+  const { raw, escapeHtml } = helpers;
   const collectionName = vars.COLLECTION || 'products';
   const buttonText = vars.BUTTON_TEXT || 'View Details';
 

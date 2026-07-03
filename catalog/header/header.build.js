@@ -2,9 +2,9 @@
 // Builds the navbar from config.json: the logo (site.logo) and the nav items
 // (top-level `nav` array, flattened onto vars.NAV as [{ label, url }, ...]).
 
-const { raw, escapeHtml } = require('../../lib/html');
-
-function build(vars, loadComponent, replaceVariables) {
+// Self-contained: engine helpers come from the 4th `helpers` arg, so a deployed copy needs no
+// engine lib/ on a relative path.
+function build(vars, loadComponent, replaceVariables, { raw, escapeHtml }) {
   const navItems = Array.isArray(vars.NAV) ? vars.NAV : [];
 
   const navHtml = navItems.map(item => `
