@@ -4,6 +4,30 @@ A running log of bugs and structural inconsistencies, so they aren't forgotten. 
 entries at the top; keep each short — symptom, why it matters, a sketch of the fix, status. Resolved
 entries stay as a record, marked ✅ Fixed.
 
+## `ssg build` doesn't catch unresolved `{{VAR}}` / `{{COMPONENT}}` — only `ssg test` does
+
+**Symptom.** When a template leaves a placeholder unresolved — e.g. a custom `_layout.html` still
+using `{{HEADER}}` after that var was removed — the literal `{{HEADER}}` ships in the output HTML and
+`ssg build` **exits 0** with no warning. The "no unresolved `{{VAR}}`" / "no leftover `{{COMPONENT:..}}`"
+invariants live in the always-on checks (`lib/checks.js`, lines 26–27 / 46–47), which run only via
+`ssg test` (through `lib/test-runner.js`). (Discovered building the private site against the
+header/footer-deps engine: 51 pages "built", output held literal `{{HEADER}}`/`{{FOOTER}}` and zero
+`<header>`/`<footer>`, exit 0.)
+
+**Why it matters.** A broken migration — or any typo'd placeholder — produces visibly broken pages
+that a plain `npm run build` + deploy ships without complaint; the failure only surfaces if the site
+also runs `ssg test`. A sharp edge for the header/footer migration below, and for `ssg init`-scaffolded
+sites that may not have wired up tests yet.
+
+**Fix (sketch).** Run the unresolved-placeholder scan during `build` too — either always (fail the
+build, matching "the build exits non-zero on any page/generator failure") or as a **warning** through
+`lib/log.js` (non-fatal: `build` stays lenient but noisy). Leaning warning-by-default with an opt-in
+strict mode, so `build` doesn't suddenly start failing sites that tolerate a stray placeholder. Reuse
+`checks.js`'s `visible` scan (it strips HTML comments) — but note it does **not** strip code samples,
+so a literal `{{VAR}}` in visible `<pre>`/`<code>` is a known false-positive to scope out first.
+
+**Status.** Open.
+
 ## Rename the layout's built-asset vars `{{HEAD_EXTRA}}` / `{{BODY_EXTRA}}`
 
 **Symptom.** The layout placeholders `{{HEAD_EXTRA}}` (in `<head>`) and `{{BODY_EXTRA}}` (end of
@@ -56,8 +80,10 @@ bundled, and a layout can't express "I depend on header + footer" the way any ot
 `{{COMPONENT:header}}` / `{{COMPONENT:footer}}` and declares `"dependencies": ["header","footer"]` in a
 new `_layout.json`; `buildPage` no longer builds header/footer or injects `{{HEADER}}`/`{{FOOTER}}`
 vars, and `ASSET_KINDS.base` is now `['_layout']` (header/footer bundle via the layout's dependencies).
-The per-page `header_theme` still reaches the header: it's passed as `HEADER_MODE` in the layout's
-vars, so `{{COMPONENT:header}}` — built with those vars — fills `data-navbar-style`. Output is
+The per-page `header_theme` still reaches the header, and the mode derivation moved out of `buildPage`
+into a new **`_layout.build.js`**: `buildPage` passes the raw `HEADER_THEME`, the layout script
+derives `HEADER_MODE` (default `light`) and sets it on `vars`, so both the body attribute and the
+nested `{{COMPONENT:header}}` — resolved with those same vars — fill from it. Output is
 **content-identical** for the example (a whole-tree diff shows no change but working-tree line
 endings). A smoke check guards that the header receives the theme.
 
@@ -66,9 +92,11 @@ endings). A smoke check guards that the header receives the theme.
 and `ssg build` won't flag it (the unresolved-`{{VAR}}` check only runs in `ssg test`). **Both sites**
 (private + demo) override `_layout.html`, so each needs a one-line-each swap
 (`{{HEADER}}`→`{{COMPONENT:header}}`, `{{FOOTER}}`→`{{COMPONENT:footer}}`) in the same commit that
-bumps their engine submodule.
+bumps their engine submodule. See **[docs/layout-migration.md](layout-migration.md)** for the full
+per-site steps.
 
-**Status.** Open. Enabled by the `_layout`-as-component fix; deliberately not bundled into it.
+**Status.** ✅ Fixed on branch `fix/header-footer-deps` (pending merge). Enabled by the
+`_layout`-as-component fix; deliberately not bundled into it.
 
 ## ✅ `_layout` is applied specially, not as a component *(fixed)*
 

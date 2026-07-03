@@ -381,11 +381,6 @@ function buildPage(pageConfig, pageName) {
     }
   });
 
-  // The page's header theme, exposed to the layout (and, through it, the header component) as
-  // HEADER_MODE. header/footer are now rendered by the layout via {{COMPONENT:header/footer}} —
-  // declared as its dependencies in _layout.json — not built + injected here.
-  const headerMode = pageData.header_theme || 'light';
-
   // Collect all CSS files (including page-specific). `assetsFrom`, set on generated
   // pages from a template, links the template page's own asset.
   const cssFiles = collectComponentCSS(pageData.components || [], pageData.page, pageData.assetsFrom);
@@ -406,7 +401,10 @@ function buildPage(pageConfig, pageName) {
     PAGE_DESCRIPTION: pageData.description || flatConfig.SITE_DESCRIPTION,
     SITE_NAME: flatConfig.SITE_NAME,
     CONTENT: raw(mainContent),
-    HEADER_MODE: headerMode,
+    // The page's raw header_theme; the _layout component derives HEADER_MODE from it (defaulting
+    // to 'light') and passes that to the body attribute + the header — so the mode lives with the
+    // layout, not as build-wide global processing here.
+    HEADER_THEME: pageData.header_theme,
     HEAD_EXTRA: raw(cssLinks),
     BODY_EXTRA: raw(jsScripts)
   };
