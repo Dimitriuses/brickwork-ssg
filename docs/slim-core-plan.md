@@ -112,8 +112,21 @@ with where it came from). (Stamp mechanics live in §3 — see Notes.)
 
 ## Two phases
 
-Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) → **Phase 2 = v0.7.0**
-(breaking, loud migration note). Pre-1.0, so a minor carries the breaking change.
+**Revised (single release): everything here ships as one `v0.6.0`.** Originally this was staged as
+Phase 1 = v0.6.0 (additive) → Phase 2 = v0.7.0 (breaking, defaults deleted). That second bump is no
+longer needed *soon*, because **the `catalog/` keeps shipping**: the build stops resolving engine
+defaults (a site owns what it uses), but the catalog stays in the engine as the deploy source **and**
+the safety net, so `ssg add material --all-used` keeps working indefinitely. A site migrates to v0.6.0
+in **one step** — bump the engine and run `ssg add material --all-used` in the same commit so it owns
+what it used to inherit. The **truly-breaking catalog *removal*** (the engine ships nothing to `ssg
+add` from) is deferred to the first **`example-material-design`** / external-registry release (tooling
+§3) — **not anytime soon** — so the version tag changes **once, to `v0.6.0`**. The Phase 1 / Phase 2
+labels below now mark *implementation order within v0.6.0*, not separate releases.
+
+> **Aside — future site-source layout.** `ssg init [dir]` (and `ssg build --site <dir>`) already
+> support a subdirectory, so a site could keep its source under `src/` (e.g. `ssg init ./src`) — a
+> layout being considered (with `assets/` possibly moving under `shared/`). Not built here; noted so
+> the `[dir]` param is designed with it in mind.
 
 ### Phase 1 — deploy commands + the `--all-used` bridge *(defaults still shipped; additive; ~v0.6.0)*
 
@@ -205,9 +218,12 @@ Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) �
 - **Partial overrides must survive.** Gap-fill per file; never overwrite a site's existing file.
 - **`components/registry.json` remaps.** If a site maps a name to a non-default folder, `add`/
   `--all-used` must respect the mapping when deciding source + destination paths.
-- **Slim core is breaking — treat it like the `generate-detail.js` retire (v0.4).** Major-ish bump,
-  loud migration note, and *the sites go first* (`--all-used` on demo + verify private) before the
-  engine drops anything.
+- **Breaking, but softened by keeping the catalog.** v0.6.0 stops the build resolving engine defaults
+  (a site must own what it uses), so it's a breaking bump with a loud migration note — but because the
+  **catalog stays shipped**, the fix is one command (`ssg add material --all-used`) and stays available
+  forever (re-run to re-sync). The engine never *deletes* what a site needs mid-migration, unlike the
+  `generate-detail.js` retire (v0.4). Still: *the sites go first* — bump + `--all-used` in one commit,
+  verify a clean build — before relying on it.
 - **Catalog rot.** Once defaults aren't auto-built, they can break unnoticed. The `example/` showcase
   (deploying what it uses) must build every CI run — that's what keeps the catalog honest.
 - **Idempotency + git hygiene.** `add`/`--all-used` write only; re-running is safe; the tool never
@@ -311,7 +327,7 @@ R5. ✅ **`test` kind (follow-on).** Added `ssg add test <name>` — a sixth kin
    was considered and **deferred** — it's a singleton server, not a named material; see ROADMAP
    *"Admin panel extension"*.
 
-### Phase 2 — slim core + `ssg init` (~v0.7.0, breaking — after sites eject)
+### Phase 2 — slim core + `ssg init` (ships in `v0.6.0`; the catalog stays — see "Two phases")
 
 A. ✅ **Relocate defaults to `catalog/`** (`feat/slim-core`). Moved `engine/components/*` (incl.
    `_layout`) → `engine/catalog/*`; `add`/`--all-used` source from the catalog (`createComponents`
@@ -325,9 +341,11 @@ B. ✅ **Not-installed error** (`feat/slim-core`). `loadComponent` on a miss now
    loudly on the throw. smoke covers it.
 C. **`ssg init`.** The blank scaffold (files above) + `--template demo` (git-clone the demo files,
    history-stripped, engine re-pinned). Add the **CI gate** that builds the demo against engine `main`.
-D. **Ship the breaking release.** Loud migration note; the bump; engine + both sites together (sites
-   already own their materials from Phase 1). **`--all-used` stays** (it's the standing material-install
-   command, not an eject-only bridge).
+D. **Ship `v0.6.0`** (single release — see "Two phases"). Loud migration note: "v0.6.0 no longer
+   auto-provides default components — run `ssg add material --all-used` when you bump so your site owns
+   them." The **catalog stays shipped**, so `--all-used` remains available and the migration is
+   one-step + reversible-in-practice (re-run to re-sync). No separate breaking bump: the catalog's
+   eventual *removal* is a far-future example-material-design release (tooling §3), not this tag.
 
 > **Follow-up (docs debt):** the engine `CLAUDE.md` still describes the pre-slim-core layout (default
 > components under `components/`, and a stale `{{HEADER}}/{{FOOTER}}` layout note) — it needs a pass to

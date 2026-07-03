@@ -29,10 +29,13 @@ structural change and the prerequisite for (2) and (3).
 > **Detailed plan (with `ssg init`, as one two-phase task incl. an "eject" transition bridge):**
 > [slim-core-plan.md](slim-core-plan.md). The summary below stays roadmap-level.
 >
-> **Status: Phase 1 built on `feat/deploy`** (additive, pre-release) — `ssg add <kind> <name>` for all
-> five kinds (`page`/`component`/`generator`/`builder` scaffold new material; `material` copies an
-> engine material, `material --all-used` is the eject bridge). **Phase 2** (relocate defaults to
-> `catalog/`, not-installed error, `ssg init`) is the remaining breaking release.
+> **Status (all one `v0.6.0` — revised, catalog stays):** Phase 1 built on `feat/deploy` — `ssg add
+> <kind> <name>` for all five kinds (`page`/`component`/`generator`/`builder` scaffold; `material`
+> copies an engine material, `material --all-used` the eject bridge). Phase 2 on `feat/slim-core`:
+> ✅ defaults relocated to `catalog/` (build no longer resolves them; example self-deploys), ✅
+> not-installed build error; **remaining: `ssg init`**. The catalog **keeps shipping**, so this is a
+> single breaking bump (migrate with `--all-used`), not a two-step release — the catalog's removal is a
+> far-future §3 (`example-material-design`) concern. See [slim-core-plan.md](slim-core-plan.md).
 >
 > **Reframed:** `ssg add <kind> <name>` is a scaffolding command (`ng generate`-style: `page` /
 > `component` / `generator` / `builder` create new material; **`material`** copies an engine one).
@@ -172,8 +175,11 @@ Full design, decisions, and as-built notes: **[terminal-ux-plan.md](terminal-ux-
 
 - **Colour scope (settled).** Shipped as the three-light scale + dim — no per-phase palettes; a
   verdict at a glance, not a rainbow. Keep it that way.
-- **Slim-core timing.** Carving defaults into a catalog (1) is a breaking change for any site that
-  relied on inheritance — it pairs with a major version and a migration note, like the v0.4 retire
-  of `generate-detail.js`.
+- **Slim-core timing (revised — one release, `v0.6.0`).** Carving defaults into a catalog and having
+  the build stop resolving them is breaking for any inheriting site — but the **catalog keeps shipping**
+  (deploy source + safety net), so the migration is one command (`ssg add material --all-used`) and the
+  version tag changes **once, to `v0.6.0`**. There is **no second breaking "defaults deleted" bump**
+  soon: the catalog's eventual *removal* waits for the first `example-material-design` / external-registry
+  release (§3), and might be a long way off. See [slim-core-plan.md](slim-core-plan.md) → "Two phases".
 - **One distribution story.** (1) in-engine catalog and (3) npm registry should share a single
   `ssg add` resolution path so "where did this material come from" has one answer.
