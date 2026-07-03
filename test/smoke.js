@@ -548,6 +548,13 @@ try {
   check('scaffold builder: errors when the component does not exist',
     bExit !== 0 && /no component "ghost"/.test(bErr));
 
+  // test: a runnable test/<name>.test.js stub (folder-discovered, no registry).
+  execSync(`node cli.js add test smoke --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const testStub = fs.readFileSync(path.join(stmp, 'test', 'smoke.test.js'), 'utf8');
+  check('scaffold test: writes test/<name>.test.js exporting a test function',
+    fs.existsSync(path.join(stmp, 'test', 'smoke.test.js')) &&
+    /module\.exports\s*=\s*\(ctx\)\s*=>/.test(testStub) && /ctx\.check\(/.test(testStub));
+
   // --dry-run writes nothing.
   const dout = execSync(`node cli.js add page ghostpage --dry-run --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
   check('scaffold: --dry-run reports without writing',

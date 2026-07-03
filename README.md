@@ -33,7 +33,7 @@ node engine/cli.js build                 # build the site (cwd) into build/
 node engine/cli.js build --site path     # or build any site directory
 node engine/cli.js admin                 # product admin on http://localhost:3000
 node engine/cli.js test                  # build + engine checks + site tests
-node engine/cli.js add <kind> <name>     # scaffold new material: page|component|generator|builder
+node engine/cli.js add <kind> <name>     # scaffold new material: page|component|generator|builder|test
 node engine/cli.js add material <name>   # adopt an engine material into the site (--force, --dry-run)
 node engine/cli.js add material --all-used   # adopt every material the site uses but inherits
 ```
@@ -52,6 +52,7 @@ site currently inherits; an edited file is reported as **drift**, not overwritte
 | `component` | `components/<name>/` stubs; `--folder=<dir>` relocates + `--register` writes the `components/registry.json` remap |
 | `generator` | `generators/generate-<name>.js` (a `generate(ctx, options)` stub) **and** a `generators/registry.json` entry |
 | `builder` | `<name>.build.js` inside an **existing** component's folder (errors if that component doesn't exist) |
+| `test` | `test/<name>.test.js` — a runnable site-test stub, discovered + run by `ssg test` |
 | `material` | copies an engine material into the site — `--all-used`, `--force`, `--dry-run` |
 
 Every kind refuses to overwrite an existing file unless `--force`, and never commits — you review the

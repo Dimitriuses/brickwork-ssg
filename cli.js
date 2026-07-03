@@ -36,7 +36,7 @@ for (let i = 1; i < argv.length; i++) {
 function fail(message) {
   console.error(message);
   console.error('Usage: ssg <build|admin|test|add> [--site <dir>]');
-  console.error('       ssg add <page|component|generator|builder> <name>   scaffold new material');
+  console.error('       ssg add <page|component|generator|builder|test> <name>   scaffold new material');
   console.error('       ssg add material <name> | --all-used [--force] [--dry-run]   adopt engine material(s)');
   process.exit(1);
 }
@@ -70,7 +70,7 @@ function configureLogging(cmd) {
 if (command === 'add') {
   configureLogging('add');
   const log = require('./lib/log');
-  const KINDS = ['page', 'component', 'generator', 'builder', 'material'];
+  const KINDS = ['page', 'component', 'generator', 'builder', 'test', 'material'];
   const kind = positionals[0];
   const name = positionals[1];
   if (!KINDS.includes(kind)) {

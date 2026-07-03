@@ -28,8 +28,8 @@ component it uses — it copied them all during the v0.4 migration — so it's t
 ## `ssg add <kind> <name>` — the command model (revised)
 
 `ssg add` is a **scaffolding + adoption** command. The **kind** picks the behaviour — mental model:
-**author new** (`page` / `component` / `generator` / `builder`, created with starter stubs) vs
-**adopt existing** (`material`, copied from the engine catalog — the Phase-1 work).
+**author new** (`page` / `component` / `generator` / `builder` / `test`, created with starter stubs)
+vs **adopt existing** (`material`, copied from the engine catalog — the Phase-1 work).
 
 | kind | creates | registry | flags |
 |---|---|---|---|
@@ -37,6 +37,7 @@ component it uses — it copied them all during the v0.4 migration — so it's t
 | **`component <name>`** | `components/<name>/<name>.{html,css,js,json}` (minimal-placeholder stubs) | `--register` writes a `components/registry.json` entry (name → folder) | `--register`, `--folder=<dir>` |
 | **`generator <name>`** | `generators/generate-<name>.js` (a `generate(ctx, options)` stub) | **registers** in `generators/registry.json` (`<name> → generate-<name>.js`) | — |
 | **`builder <name>`** | `<name>.build.js` in the **existing** component `<name>`'s folder (a `build(vars, loadComponent, replaceVariables, helpers)` stub); **errors if the component doesn't exist** | — | — |
+| **`test <name>`** | `test/<name>.test.js` (a `(ctx) => { ctx.check(...) }` stub; discovered by folder, run by `ssg test`) | — | — |
 | **`material <name>`** | **copies** the engine-catalog material into the site — all files, per-file gap-fill, drift-aware (*Phase 1, already built*) | — | `--all-used`, `--force`, `--dry-run` |
 
 **Starter stub contents (tunable):**
@@ -227,9 +228,9 @@ Illustrative versions: current **v0.5.1** → **Phase 1 = v0.6.0** (additive) �
 
 ## Decided
 
-- **`ssg add <kind> <name>` is a scaffolding command** (`ng generate`-style) with five kinds —
-  `page` / `component` / `generator` / `builder` create new material with stubs; **`material`** copies
-  an engine-catalog material (the Phase-1 work). See the command-model section.
+- **`ssg add <kind> <name>` is a scaffolding command** (`ng generate`-style) with six kinds —
+  `page` / `component` / `generator` / `builder` / `test` create new material with stubs; **`material`**
+  copies an engine-catalog material (the Phase-1 work). See the command-model section.
 - **Bridge command:** **`ssg add material --all-used`** — a flag on the `material` kind, not a separate verb.
 - **"Used" detection:** **build resolution** — the site's actual component graph, per file, site-first.
 - **Scope:** **components + `_layout`** (the engine ships no default generators, so nothing else).
@@ -302,9 +303,13 @@ R3. ✅ **`generator` + `builder`.** `generator <name>` → `generators/generate
    folder (registry-remap-aware), **erroring if the component doesn't exist**. Also fixed
    `lib/components.js` `componentFolder` to honour the site registry remap (it agreed with
    `resolveComponentFile` only for sub-components before), so `builder` finds a `--folder`'d component.
-R4. ✅ **Docs + README.** `README.md` documents `ssg add <kind> <name>` (all five kinds + a table);
+R4. ✅ **Docs + README.** `README.md` documents `ssg add <kind> <name>` (all kinds + a table);
    Phase 1 marked done here, in the tooling draft §1, and in ROADMAP. (Running `material --all-used`
    on the real demo happens in the *sites* when they bump.)
+R5. ✅ **`test` kind (follow-on).** Added `ssg add test <name>` — a sixth kind scaffolding a runnable
+   `test/<name>.test.js` stub (folder-discovered, run by `ssg test`; green out of the box). `admin`
+   was considered and **deferred** — it's a singleton server, not a named material; see ROADMAP
+   *"Admin panel extension"*.
 
 ### Phase 2 — slim core + `ssg init` (~v0.7.0, breaking — after sites eject)
 
