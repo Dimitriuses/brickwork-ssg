@@ -313,15 +313,22 @@ R5. ✅ **`test` kind (follow-on).** Added `ssg add test <name>` — a sixth kin
 
 ### Phase 2 — slim core + `ssg init` (~v0.7.0, breaking — after sites eject)
 
-A. **Relocate defaults to `catalog/`.** Move `engine/components/*` (incl. `_layout`) →
-   `engine/catalog/*`; point `add`/`--all-used` at the catalog; stop build resolution from the (now
-   empty) engine `components/`. Convert the bundled `example/` into a **self-deploying showcase** — it
-   `ssg add`s the materials it uses, so it still builds and the catalog stays CI-tested (kept, not
-   deleted).
-B. **Not-installed error.** Resolution for an unowned name → a clear "not installed — run
-   `ssg add <name>`" error (instead of a silent miss).
+A. ✅ **Relocate defaults to `catalog/`** (`feat/slim-core`). Moved `engine/components/*` (incl.
+   `_layout`) → `engine/catalog/*`; `add`/`--all-used` source from the catalog (`createComponents`
+   takes an `engineComponentsDir`; build → `components/`, deploy → `catalog/`); the build no longer
+   resolves engine defaults. The bundled `example/` is now a **self-deploying showcase** — smoke
+   `ssg add material --all-used`s its catalog materials before building; deployed folders are
+   gitignored (only authored `blocks/pricing` is committed). Catalog build scripts made self-contained
+   (helpers from the 4th arg, no `require('../../lib/...')`) so deployed copies run anywhere.
+B. ✅ **Not-installed error** (`feat/slim-core`). `loadComponent` on a miss now throws
+   `Component "<name>" is not installed … run: ssg add material <name>`; the build already fails
+   loudly on the throw. smoke covers it.
 C. **`ssg init`.** The blank scaffold (files above) + `--template demo` (git-clone the demo files,
    history-stripped, engine re-pinned). Add the **CI gate** that builds the demo against engine `main`.
 D. **Ship the breaking release.** Loud migration note; the bump; engine + both sites together (sites
    already own their materials from Phase 1). **`--all-used` stays** (it's the standing material-install
    command, not an eject-only bridge).
+
+> **Follow-up (docs debt):** the engine `CLAUDE.md` still describes the pre-slim-core layout (default
+> components under `components/`, and a stale `{{HEADER}}/{{FOOTER}}` layout note) — it needs a pass to
+> point at `catalog/` and the `{{COMPONENT:header/footer}}` layout. Tracked, not done in A/B.

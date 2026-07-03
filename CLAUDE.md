@@ -28,10 +28,12 @@ A custom static-site generator. The build is driven by [build.js](build.js) (ent
 ### Engine vs. site roots
 
 `build.js` resolves two roots so one engine can build many sites:
-- **`ENGINE_ROOT`** (`__dirname`) — shared code: `components/`, `generators/`, `lib/`, the `_layout`, and `shared/admin/`.
-- **`SITE_ROOT`** (`process.cwd()`) — per-site: `config.json`, `pages/`, `assets/`, `shared/` data, and the `build/` output.
+- **`ENGINE_ROOT`** (`__dirname`) — shared code: `build.js`, `generators/`, `lib/`, `shared/admin/`, and the **`catalog/`** of deployable materials (see slim-core note below).
+- **`SITE_ROOT`** (`process.cwd()`) — per-site: `config.json`, `pages/`, `assets/`, `shared/` data, `components/` (the materials the site owns), and the `build/` output.
 
 Components resolve **site-first, then engine**, **per file** (`resolveComponentFile`): a site can override just `header/header.html` and keep the engine's `header.build.js`, or ship a whole new component. A site `components/registry.json` may map a component name to a folder. The `ssg` CLI chdir's into the requested `--site` so `SITE_ROOT` = cwd.
+
+> **Slim core (Phase 2, `feat/slim-core`).** The engine's default components now live in **`catalog/`**, not `components/`, and **the build no longer resolves engine defaults** — a site **owns what it uses** and adopts catalog materials with `ssg add material <name>` (or `--all-used`). So file references below that say `components/<x>` are now **`catalog/<x>`** in the engine (a site still uses its own `components/`). An unowned material fails the build with `is not installed — run ssg add material <name>`. This CLAUDE.md predates the move and still says `components/` in places — read those as `catalog/` for engine-shipped materials; a full pass is pending (see docs/slim-core-plan.md).
 
 ### Build pipeline (order matters)
 
@@ -71,7 +73,7 @@ Fields: `page` (output filename), `title`, `description`, `header_theme` (`"dark
 
 Content body resolution order: explicit `content_file` → inline `content` string → auto-load `<page>.html` from the same folder.
 
-Component **placement**: if the content body contains `{{COMPONENT:name}}`, that component is injected there; otherwise it is prepended to the top of the page. The master template is [components/_layout/_layout.html](components/_layout/_layout.html), which slots in `{{HEADER}}`, `{{CONTENT}}`, `{{FOOTER}}`, and the auto-collected CSS/JS links (`{{HEAD_EXTRA}}`/`{{BODY_EXTRA}}`). Just before write, `normalizeWebPaths` rewrites backslashes to `/` inside `src`/`href`/`url(...)`. Bootstrap 5.3 + Bootstrap Icons load from CDN in the layout.
+Component **placement**: if the content body contains `{{COMPONENT:name}}`, that component is injected there; otherwise it is prepended to the top of the page. The master template is [catalog/_layout/_layout.html](catalog/_layout/_layout.html) — a first-class component built through `buildComponent`, which places `{{COMPONENT:header}}`, `{{CONTENT}}`, `{{COMPONENT:footer}}` (header/footer are declared `_layout` dependencies in `_layout.json`) and the auto-collected CSS/JS links (`{{HEAD_EXTRA}}`/`{{BODY_EXTRA}}`). Its `_layout.build.js` derives `HEADER_MODE` (per-page `header_theme`, default `light`) for the body attribute + the header. Just before write, `normalizeWebPaths` rewrites backslashes to `/` inside `src`/`href`/`url(...)`. Bootstrap 5.3 + Bootstrap Icons load from CDN in the layout.
 
 ### Collections & product pages
 

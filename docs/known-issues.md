@@ -26,7 +26,13 @@ strict mode, so `build` doesn't suddenly start failing sites that tolerate a str
 `checks.js`'s `visible` scan (it strips HTML comments) — but note it does **not** strip code samples,
 so a literal `{{VAR}}` in visible `<pre>`/`<code>` is a known false-positive to scope out first.
 
-**Status.** Open.
+**Update (slim core, Phase 2 B).** An unresolved **`{{COMPONENT:x}}`** now fails the build loudly:
+`buildComponent` resolves it, and an unowned component throws `is not installed — run ssg add material
+x` (build exits non-zero). So the `{{COMPONENT}}` half is covered at build time. The **`{{VAR}}` half**
+(a literal `{{HEADER}}` etc.) is still only caught by `ssg test` — that's the remaining gap here.
+
+**Status.** Partly fixed (`{{COMPONENT}}` now build-fatal); the unresolved-`{{VAR}}` scan at build time
+is still open.
 
 ## Rename the layout's built-asset vars `{{HEAD_EXTRA}}` / `{{BODY_EXTRA}}`
 

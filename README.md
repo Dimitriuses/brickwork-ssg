@@ -86,8 +86,10 @@ Clone a site with its engine in one step: `git clone --recurse-submodules <site-
 
 - **Components** — a folder with `<name>.html` (template), optional `style.css`/
   `script.js` (auto-linked only where used), and optional `<name>.build.js` for
-  custom logic. Engine ships `header`, `footer`, `hero`, `products`, `faq`,
-  `contactIcons`, `carousel`, and a `_layout`.
+  custom logic. The engine ships a **catalog** of ready materials (`header`, `footer`,
+  `hero`, `products`, `faq`, `contactIcons`, `carousel`, and `_layout`) — a slim core
+  no longer resolves them during a build; a site **owns what it uses**, adopting them
+  with `ssg add material <name>` (or `--all-used`).
 - **Overrides** — drop a same-named file in your site's `components/` to override
   any engine component or the layout, without forking engine logic.
 - **Collections** — `shared/database.json` maps data folders (e.g. `products/`)
