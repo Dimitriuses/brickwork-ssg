@@ -922,6 +922,24 @@ templatePages.forEach(({ file, config }) => {
   }
 });
 
+// Surface unresolved {{VAR}} placeholders at build time — a warning (not fatal); `ssg test` still
+// *fails* on them (lib/checks.js). Comments are stripped first (as in checks.js) so a commented-out
+// placeholder/example is ignored; a *visible* `{{COMPONENT:..}}` would already have failed component
+// resolution, so this catches the plain-`{{VAR}}` gap (e.g. a `{{HEADER}}` left after a rename).
+const unresolvedIn = [];
+const unresolvedVars = new Set();
+for (const rel of listFilesRelative(BUILD_DIR).filter(f => f.endsWith('.html'))) {
+  const visible = fs.readFileSync(path.join(BUILD_DIR, rel), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  const found = visible.match(/\{\{[A-Za-z0-9_]+\}\}/g);
+  if (found) { unresolvedIn.push(rel); found.forEach(v => unresolvedVars.add(v)); }
+}
+if (unresolvedIn.length) {
+  const vars = [...unresolvedVars].slice(0, 5).join(', ') + (unresolvedVars.size > 5 ? ', …' : '');
+  const pages = unresolvedIn.slice(0, 5).join(', ') + (unresolvedIn.length > 5 ? ', …' : '');
+  log.warn(`Unresolved placeholder(s) ${vars} left literal in ${unresolvedIn.length} page(s): ${pages}. ` +
+    '`ssg test` fails on these.', { phase: 'pages' });
+}
+
 // Flush the grouped warnings, then the verdict — coloured by outcome (traffic-light), text
 // byte-identical to before when colour is off (e.g. piped/CI).
 log.summary({

@@ -31,7 +31,7 @@ site workarounds (neutralized comments) remain harmless.
 
 **Status.** ✅ Fixed.
 
-## `ssg build` doesn't catch unresolved `{{VAR}}` / `{{COMPONENT}}` — only `ssg test` does
+## ✅ `ssg build` doesn't catch unresolved `{{VAR}}` / `{{COMPONENT}}` — only `ssg test` does *(fixed)*
 
 **Symptom.** When a template leaves a placeholder unresolved — e.g. a custom `_layout.html` still
 using `{{HEADER}}` after that var was removed — the literal `{{HEADER}}` ships in the output HTML and
@@ -53,13 +53,18 @@ strict mode, so `build` doesn't suddenly start failing sites that tolerate a str
 `checks.js`'s `visible` scan (it strips HTML comments) — but note it does **not** strip code samples,
 so a literal `{{VAR}}` in visible `<pre>`/`<code>` is a known false-positive to scope out first.
 
-**Update (slim core, Phase 2 B).** An unresolved **`{{COMPONENT:x}}`** now fails the build loudly:
-`buildComponent` resolves it, and an unowned component throws `is not installed — run ssg add material
-x` (build exits non-zero). So the `{{COMPONENT}}` half is covered at build time. The **`{{VAR}}` half**
-(a literal `{{HEADER}}` etc.) is still only caught by `ssg test` — that's the remaining gap here.
+**Fix.** ✅ Done in two parts. **`{{COMPONENT}}`** (Phase 2 B): a visible unresolved `{{COMPONENT:x}}`
+now fails the build — `buildComponent` resolves it and an unowned component throws `is not installed —
+run ssg add material x` (non-zero exit). **`{{VAR}}`** (`fix/known-issues`): after the build, `build.js`
+scans the output HTML (comments stripped, as in `checks.js`) and **warns** on any remaining
+`{{VAR}}` — non-fatal by design (`build` stays lenient), listing the vars + pages; `ssg test` still
+**fails** on them (the enforcement path). So `ssg build` is no longer silent. A smoke check builds a
+site with an unresolved `{{VAR}}` and asserts the warning + a clean exit (and that a commented-out
+placeholder is ignored). Note kept from the sketch: the scan strips comments but **not** code samples,
+so a literal `{{VAR}}` in visible `<pre>`/`<code>` would warn (rare; a future opt-in strict mode could
+fail the build).
 
-**Status.** Partly fixed (`{{COMPONENT}}` now build-fatal); the unresolved-`{{VAR}}` scan at build time
-is still open.
+**Status.** ✅ Fixed (`{{COMPONENT}}` build-fatal; `{{VAR}}` warns at build, fails at test).
 
 ## Rename the layout's built-asset vars `{{HEAD_EXTRA}}` / `{{BODY_EXTRA}}`
 

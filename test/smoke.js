@@ -711,4 +711,24 @@ try {
   try { fs.rmSync(rtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// ssg build surfaces unresolved {{VAR}} as a warning (was silent; ssg test still fails on them). A
+// commented-out placeholder is ignored (comment-stripped, like lib/checks.js).
+const vtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwvar-'));
+const vtmpArg = vtmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(vtmp, p)), { recursive: true }); fs.writeFileSync(path.join(vtmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'V' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{HEAD_EXTRA}}</head><body>{{CONTENT}}{{BODY_EXTRA}}</body></html>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main>Hi {{UNFILLED_THING}} <!-- {{COMMENTED_VAR}} --></main>');
+  fs.mkdirSync(path.join(vtmp, 'assets', 'images'), { recursive: true });
+  let vExit = 0, vOut = '';
+  try { vOut = execSync(`node cli.js build --site "${vtmpArg}"`, { cwd: root, stdio: 'pipe' }).toString(); }
+  catch (e) { vExit = e.status || 1; vOut = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('ssg build warns on unresolved {{VAR}} (non-fatal; commented ignored)',
+    vExit === 0 && /Unresolved placeholder/.test(vOut) && /UNFILLED_THING/.test(vOut) && !/COMMENTED_VAR/.test(vOut));
+} finally {
+  try { fs.rmSync(vtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
