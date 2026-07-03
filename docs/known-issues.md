@@ -69,6 +69,45 @@ building an `ssg init` blank site; a smoke check now builds a blank `ssg init` s
 
 **Status.** ✅ Fixed.
 
+## ✅ Catalog build scripts `require('../../lib/...')` — broke once deployed into a site *(fixed)*
+
+**Symptom.** The engine's component `*.build.js` scripts pulled helpers via
+`const { raw, escapeHtml } = require('../../lib/html')`. That relative path only resolves while the
+script lives in the engine tree; the moment a site **owns** a copy (a hand-copy, or `ssg add material`
+deploying it from the catalog), `../../lib/html` resolves against the *site's* non-existent `lib/` and
+the build dies with `Cannot find module '../../lib/html'`.
+
+**Why it matters.** It made the engine's own catalog materials **not actually deployable** — defeating
+the whole point of the slim-core `catalog/` + `ssg add`. The example self-deploy (Phase 2 A) hit it on
+the first build. (CLAUDE.md had already documented the private site's hand-copies working around this.)
+
+**Fix.** ✅ Done (`feat/slim-core`, Phase 2 A). The five catalog scripts that required `lib/html`
+(`contactIcons`, `faq`, `footer`, `header`, `products`) now take `raw`/`escapeHtml` from the 4th
+`helpers` argument `buildComponent` always passes — self-contained, so a deployed copy runs anywhere.
+Same pattern the private site already used.
+
+**Status.** ✅ Fixed.
+
+## ✅ `componentFolder` ignored the site `registry.json` remap *(fixed)*
+
+**Symptom.** `lib/components.js`'s `componentFolder(name)` returned `subcomponentMap()[name] || name`
+— it honoured sub-component → parent-folder mapping but **not** a site `components/registry.json` remap,
+even though `resolveComponentFile` *did* apply that remap for the site path. So for a component the site
+relocates (e.g. `pricing` → `blocks/pricing`), `componentFolder` disagreed with where the files actually
+resolve. Surfaced with `ssg add builder <name>` on a `--folder`'d component: the build script landed in
+`components/<name>/` instead of the remapped folder.
+
+**Why it matters.** Two helpers in the same module gave inconsistent answers for the same name — a
+latent trap for anything using `componentFolder` (the deploy-folder set in `--all-used`, the `builder`
+scaffolder).
+
+**Fix.** ✅ Done (`feat/deploy`, with the `ssg add` R1–R3 rework). `componentFolder` now applies the
+site registry remap too (`siteComponentRegistry()[folder] || folder`), agreeing with
+`resolveComponentFile`. Safe for its callers: `used-materials` (a remapped component is site-owned,
+skipped by `--all-used`) and `build.js` (destructures but never calls it).
+
+**Status.** ✅ Fixed.
+
 ## ✅ Header/footer are hard-wired globally, not linked to `_layout` *(fixed)*
 
 **Symptom.** `header` and `footer` are separate components, but nothing *declares* that the layout
