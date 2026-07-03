@@ -6,6 +6,7 @@ const { resolveGenerator } = require('./lib/generators');
 const { globToRegExp } = require('./lib/glob');
 const log = require('./lib/log');
 const { createComponents } = require('./lib/components');
+const { siteDirs } = require('./lib/dirs');
 
 // Path roots. The engine (this script, components, lib, layout) is shared by
 // every site; the site being built is the current working directory. Splitting
@@ -17,15 +18,20 @@ const SITE_ROOT = process.cwd();
 const COMPONENTS_DIR = path.join(ENGINE_ROOT, 'components');
 const GENERATORS_DIR = path.join(ENGINE_ROOT, 'generators');
 
-// Site-relative (per-site content, data and output)
-const PAGES_DIR = path.join(SITE_ROOT, 'pages');
-const ASSETS_DIR = path.join(SITE_ROOT, 'assets');
-const BUILD_DIR = path.join(SITE_ROOT, 'build');
+// config.json + shared/ are fixed at the site root (config bootstraps the layout below).
 const CONFIG_FILE = path.join(SITE_ROOT, 'config.json');
 const DATABASE_FILE = path.join(SITE_ROOT, 'shared', 'database.json');
 
 // Load site configuration
 const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+
+// Site-relative dirs, from config.json `dirs` (defaults to the conventional layout — see lib/dirs.js).
+const DIRS = siteDirs(SITE_ROOT, config);
+const PAGES_DIR = DIRS.pages;
+const ASSETS_DIR = DIRS.assets;
+const BUILD_DIR = DIRS.output;
+const SITE_GENERATORS_DIR = DIRS.generators;
+const SITE_COMPONENTS_DIR = DIRS.components;
 
 // Load database configuration for collections
 let database = { collections: [] };
@@ -116,9 +122,9 @@ const {
 function loadComponent(componentName) {
   let file = resolveComponentFile(componentName, `${componentName}.html`);
   if (!file) {
-    // Flat form (e.g. a component placed directly at components/<name>.html).
-    for (const root of [SITE_ROOT, ENGINE_ROOT]) {
-      const flat = path.join(root, 'components', `${componentName}.html`);
+    // Flat form (e.g. a component placed directly at <components>/<name>.html).
+    for (const dir of [SITE_COMPONENTS_DIR, path.join(ENGINE_ROOT, 'components')]) {
+      const flat = path.join(dir, `${componentName}.html`);
       if (fs.existsSync(flat)) { file = flat; break; }
     }
   }
@@ -427,7 +433,7 @@ function expandTemplatePage(templateFile, templateConfig) {
   if (opts.generator) {
     generatorPath = resolveGenerator(opts.generator, {
       engineGeneratorsDir: GENERATORS_DIR,
-      siteGeneratorsDir: path.join(SITE_ROOT, 'generators')
+      siteGeneratorsDir: SITE_GENERATORS_DIR
     });
     if (!generatorPath) return fail(`unknown generator "${opts.generator}" (check generators/registry.json)`);
   } else if (!opts.source) {

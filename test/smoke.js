@@ -752,4 +752,25 @@ try {
   try { fs.rmSync(btmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Configurable dirs: a config.json `dirs` block relocates pages/components/generators/assets + the
+// output dir (defaults keep today's layout). Build a src/ + shared/assets + dist/ site.
+const dirtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwdirs-'));
+const dirtmpArg = dirtmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(dirtmp, p)), { recursive: true }); fs.writeFileSync(path.join(dirtmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'D' }, nav: [], dirs: { pages: 'src/pages', components: 'src/components', generators: 'src/generators', assets: 'shared/assets', output: 'dist' } }));
+  mk('shared/assets/css/global.css', 'body{color:#123}');
+  mk('src/components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body><main>{{CONTENT}}</main>{{JS_SCRIPTS}}</body></html>');
+  mk('src/pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('src/pages/index/index.html', '<h1>SRC-LAYOUT-OK</h1>');
+  fs.mkdirSync(path.join(dirtmp, 'shared', 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${dirtmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const out = fs.readFileSync(path.join(dirtmp, 'dist', 'index.html'), 'utf8');
+  check('config.json `dirs` relocates pages/components/assets + the output dir',
+    /SRC-LAYOUT-OK/.test(out) && /assets\/css\/global\.css/.test(out) &&
+    fs.existsSync(path.join(dirtmp, 'dist', 'assets', 'css', 'global.css')));
+} finally {
+  try { fs.rmSync(dirtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
