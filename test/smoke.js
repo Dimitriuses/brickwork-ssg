@@ -689,4 +689,26 @@ try {
   try { fs.rmSync(itmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Regression (v0.6.0): a {{COMPONENT:x}} inside an HTML comment in page CONTENT must NOT be expanded by
+// the layout's buildComponent pass — a commented-out component stays disabled — while a live inline one
+// and the layout's own {{COMPONENT}} still render.
+const rtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwreg-'));
+const rtmpArg = rtmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(rtmp, p)), { recursive: true }); fs.writeFileSync(path.join(rtmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'R' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{HEAD_EXTRA}}</head><body>{{COMPONENT:header}}{{CONTENT}}{{BODY_EXTRA}}</body></html>');
+  mk('components/header/header.html', '<header>SITE-HEADER</header>');
+  mk('components/badge/badge.html', '<div>BADGE-OK</div>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main>{{COMPONENT:badge}} <!-- {{COMPONENT:badge}} --></main>');
+  fs.mkdirSync(path.join(rtmp, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${rtmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const out = fs.readFileSync(path.join(rtmp, 'build', 'index.html'), 'utf8');
+  check('commented {{COMPONENT}} in content stays disabled; live + layout ones render',
+    (out.match(/BADGE-OK/g) || []).length === 1 && out.includes('{{COMPONENT:badge}}') && out.includes('SITE-HEADER'));
+} finally {
+  try { fs.rmSync(rtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();

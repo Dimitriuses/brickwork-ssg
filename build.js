@@ -201,20 +201,20 @@ function buildComponent(componentName, vars = {}, buildStack = []) {
     html = replaceVariables(template, vars);
   }
   
-  // Resolve nested {{COMPONENT:xxx}} placeholders
-  const componentPattern = /\{\{COMPONENT:([a-zA-Z0-9_-]+)\}\}/g;
-  let match;
-  const matches = [];
-  
-  // Collect all matches first to avoid regex issues
-  while ((match = componentPattern.exec(html)) !== null) {
-    matches.push({ placeholder: match[0], name: match[1] });
+  // Resolve nested {{COMPONENT:xxx}} placeholders, skipping any inside an HTML comment — a
+  // commented-out `<!-- {{COMPONENT:x}} -->` stays disabled. This mirrors the content pass in
+  // buildPage, and matters because the layout is itself a component: this pass re-scans the injected
+  // {{CONTENT}}, which may carry a commented placeholder buildPage deliberately left literal. The
+  // callback replace (vs collect-then-string-replace) also keeps a non-commented `{{COMPONENT:x}}`
+  // from being resolved into an *earlier* commented one of the same name.
+  const commentRanges = [];
+  for (const c of html.matchAll(/<!--[\s\S]*?-->/g)) {
+    commentRanges.push([c.index, c.index + c[0].length]);
   }
-  
-  // Replace each nested component
-  matches.forEach(({ placeholder, name }) => {
-    const nestedComponentHtml = buildComponent(name, vars, newStack);
-    html = html.replace(placeholder, nestedComponentHtml);
+  const insideComment = (i) => commentRanges.some(([s, e]) => i >= s && i < e);
+  html = html.replace(/\{\{COMPONENT:([a-zA-Z0-9_-]+)\}\}/g, (placeholder, name, offset) => {
+    if (insideComment(offset)) return placeholder; // commented-out reference, leave literal
+    return buildComponent(name, vars, newStack);
   });
   
   return html;
