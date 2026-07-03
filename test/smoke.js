@@ -639,4 +639,28 @@ try {
   try { fs.rmSync(ltmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Slim core: a build that references a material the site doesn't own fails loudly with an
+// actionable "not installed — run ssg add material <name>" message (not a silent broken page).
+const ntmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwnotinst-'));
+const ntmpArg = ntmp.replace(/\\/g, '/');
+try {
+  fs.mkdirSync(path.join(ntmp, 'pages', 'index'), { recursive: true });
+  fs.mkdirSync(path.join(ntmp, 'components', '_layout'), { recursive: true });
+  fs.mkdirSync(path.join(ntmp, 'assets', 'images'), { recursive: true });
+  fs.writeFileSync(path.join(ntmp, 'config.json'), JSON.stringify({ site: { name: 'N' }, nav: [] }));
+  fs.writeFileSync(path.join(ntmp, 'pages', 'index', 'index.json'),
+    JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  fs.writeFileSync(path.join(ntmp, 'pages', 'index', 'index.html'), '<main>hi</main>');
+  // Owns _layout, but the layout references a material (hero) the site does not own.
+  fs.writeFileSync(path.join(ntmp, 'components', '_layout', '_layout.html'),
+    '<!doctype html><html><head><title>{{PAGE_TITLE}}</title></head><body>{{COMPONENT:hero}}{{CONTENT}}</body></html>');
+  let niExit = 0, niErr = '';
+  try { execSync(`node cli.js build --site "${ntmpArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { niExit = e.status || 1; niErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('slim core: an unowned material fails the build with an actionable message',
+    niExit !== 0 && /not installed/.test(niErr) && /ssg add material hero/.test(niErr));
+} finally {
+  try { fs.rmSync(ntmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();

@@ -123,7 +123,10 @@ function loadComponent(componentName) {
     }
   }
   if (file) return fs.readFileSync(file, 'utf8');
-  throw new Error(`Component not found: ${componentName}`);
+  // Slim core: the engine ships no default components — a site owns what it uses. A miss is almost
+  // always an un-installed material, so point at the fix rather than a bare "not found".
+  throw new Error(`Component "${componentName}" is not installed — the site does not own it and the ` +
+    `engine ships no defaults. If it is an engine material, run:  ssg add material ${componentName}`);
 }
 
 // Normalize backslashes to forward slashes inside web paths. Authors on Windows
