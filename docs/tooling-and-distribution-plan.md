@@ -7,9 +7,10 @@
 
 ## The pieces (from the roadmap)
 
-1. **Material *deploy* commands & a slim core** — `ssg add component <name>` (and generators/tests)
-   scaffolds a material into a site from a catalog, and the engine stops shipping the
-   example/default materials every site silently inherits.
+1. **Material *deploy* commands & a slim core** — `ssg add <kind> <name>` scaffolds/adopts a material;
+   the engine (eventually) stops shipping the example/default materials every site silently inherits.
+   **Phase 1 (the full `ssg add` command) is built on `feat/deploy`**; Phase 2 (the slim core itself)
+   remains.
 2. **`ssg init`** — scaffold a starting project (a baseline set of materials + a minimal
    `config.json`/`pages/`), so a fresh project isn't empty once the core is slim.
 3. **npm-distributed third-party plugins/themes + a material registry** — shared distribution once
@@ -27,6 +28,11 @@ structural change and the prerequisite for (2) and (3).
 
 > **Detailed plan (with `ssg init`, as one two-phase task incl. an "eject" transition bridge):**
 > [slim-core-plan.md](slim-core-plan.md). The summary below stays roadmap-level.
+>
+> **Status: Phase 1 built on `feat/deploy`** (additive, pre-release) — `ssg add <kind> <name>` for all
+> five kinds (`page`/`component`/`generator`/`builder` scaffold new material; `material` copies an
+> engine material, `material --all-used` is the eject bridge). **Phase 2** (relocate defaults to
+> `catalog/`, not-installed error, `ssg init`) is the remaining breaking release.
 >
 > **Reframed:** `ssg add <kind> <name>` is a scaffolding command (`ng generate`-style: `page` /
 > `component` / `generator` / `builder` create new material; **`material`** copies an engine one).

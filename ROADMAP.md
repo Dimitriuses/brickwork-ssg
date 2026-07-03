@@ -129,11 +129,12 @@ it needs a window-based generation model (below) and is a large task in its own 
 > colour system).
 
 - **`ssg add <kind> <name>` scaffolding + a slim core** *(`ssg add` is `ng generate`-style: `page`/
-  `component`/`generator`/`builder` create new material, `material` copies an engine one. Phase 1 built
-  on `feat/deploy` = the `material` kind + `--all-used` (per-file, drift-reporting); the four
-  scaffolders + slim core + `ssg init` follow — see [slim-core-plan.md](docs/slim-core-plan.md))* —
-  `ssg add component <name>` (and
-  generators/tests) scaffolds a material into a site from a catalog, **and the engine stops
+  `component`/`generator`/`builder` create new material, `material` copies an engine one. **Phase 1 —
+  the full `ssg add` command — is built on `feat/deploy`**: all four scaffolders + the `material` kind
+  + `material --all-used` (per-file, drift-reporting), smoke 119/0. **Phase 2** (slim core: relocate
+  defaults to `catalog/`, not-installed error, `ssg init`) follows — see
+  [slim-core-plan.md](docs/slim-core-plan.md))* — `ssg add <kind> <name>`
+  scaffolds a material into a site (or copies an engine one), **and the engine eventually stops
   shipping example/default materials that every site silently inherits**. This fixes three
   pains: example generators producing pages nobody asked for (no empty-override needed);
   having to dig out and hand-copy a material to edit it; and an engine update to a shared
