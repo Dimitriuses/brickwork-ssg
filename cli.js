@@ -28,6 +28,8 @@ for (let i = 1; i < argv.length; i++) {
   else if (arg === '--folder') flags.folder = argv[++i];                      // add component --folder <dir>
   else if (arg.startsWith('--layout=')) flags.layout = arg.slice('--layout='.length);
   else if (arg === '--layout') flags.layout = argv[++i];                      // add page --layout <name>
+  else if (arg.startsWith('--template=')) flags.template = arg.slice('--template='.length);
+  else if (arg === '--template') flags.template = argv[++i];                  // init --template <name>
   else if (arg === '--log') i++;                 // `--log <value>`; the value is read by resolveLogOptions
   else if (!arg.startsWith('-')) positionals.push(arg);
   // other `--flags` (--quiet/--verbose/--no-color/--log=…) are consumed by resolveLogOptions.
@@ -36,7 +38,7 @@ for (let i = 1; i < argv.length; i++) {
 function fail(message) {
   console.error(message);
   console.error('Usage: ssg <build|admin|test|add|init> [--site <dir>]');
-  console.error('       ssg init [dir] [--force] [--dry-run]   scaffold a blank buildable site into dir');
+  console.error('       ssg init [dir] [--template demo] [--force] [--dry-run]   scaffold a site into dir');
   console.error('       ssg add <page|component|generator|builder|test> <name>   scaffold new material');
   console.error('       ssg add material <name> | --all-used [--force] [--dry-run]   adopt engine material(s)');
   process.exit(1);
@@ -46,23 +48,38 @@ if (!['build', 'admin', 'test', 'add', 'init'].includes(command)) {
   fail(command ? `Unknown command: ${command}` : 'No command given.');
 }
 
-// `ssg init [dir]` — scaffold a blank site into dir (default cwd). The dir may not exist yet, so this
-// runs before the site-existence checks + chdir below.
+// `ssg init [dir]` — scaffold a site into dir (default cwd). The dir may not exist yet, so this runs
+// before the site-existence checks + chdir below. `--template <name>` clones a starter repo's files
+// (degit); without it, a blank buildable site is emitted.
 if (command === 'init') {
   const targetDir = path.resolve(process.cwd(), positionals[0] || '.');
   require('./lib/log').configure(require('./lib/log-config').resolveLogOptions({}, 'init', argv));
   const log = require('./lib/log');
-  const { scaffoldInit } = require('./lib/scaffold');
-  const result = scaffoldInit(targetDir, { force: flags.force, dryRun: flags.dryRun });
+  const opts = { force: flags.force, dryRun: flags.dryRun };
   const verb = flags.dryRun ? 'would create' : 'created';
+  const rel = path.relative(process.cwd(), targetDir) || '.';
+
+  let result, source, nextHint;
+  try {
+    if (flags.template) {
+      result = require('./lib/init-template').initFromTemplate(flags.template, targetDir, opts);
+      source = `from template "${flags.template}"`;
+      nextHint = `next: cd ${rel}, wire the engine submodule (git init; git submodule update --init --recursive, or git submodule add <engine-url> engine), then \`npm run build\``;
+    } else {
+      result = require('./lib/scaffold').scaffoldInit(targetDir, opts);
+      source = 'blank site';
+      nextHint = 'next: add the engine as a submodule (git submodule add <url> engine), then `npm run build`';
+    }
+  } catch (e) {
+    log.error(e.message, { phase: 'init' });
+    process.exit(1);
+  }
+
   result.created.forEach(f => log.info(`  + ${f}`, { phase: 'init' }));
   result.skipped.forEach(f => log.debug(`  = ${f} (exists — use --force to overwrite)`, { phase: 'init' }));
   log.flushWarnings();
-  const rel = path.relative(process.cwd(), targetDir) || '.';
-  log.success(`${verb} ${result.created.length} file(s) — blank site in ${rel}`, { phase: 'init' });
-  if (!flags.dryRun && result.created.length) {
-    log.info('next: add the engine as a submodule (git submodule add <url> engine), then `npm run build`', { phase: 'init' });
-  }
+  log.success(`${verb} ${result.created.length} file(s) — ${source} in ${rel}${result.skipped.length ? `, ${result.skipped.length} skipped` : ''}`, { phase: 'init' });
+  if (!flags.dryRun && result.created.length) log.info(nextHint, { phase: 'init' });
   process.exit(0);
 }
 

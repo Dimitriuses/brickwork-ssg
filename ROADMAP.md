@@ -134,9 +134,10 @@ it needs a window-based generation model (below) and is a large task in its own 
   `material` kind + `material --all-used` (per-file, drift-reporting), smoke 120/0. **Phase 2 (slim
   core) is underway on `feat/slim-core`**: ✅ A — defaults relocated to `catalog/`, build no longer
   resolves engine defaults, the example self-deploys; ✅ B — actionable "not installed" build error;
-  ✅ C — `ssg init [dir]` blank scaffold (`--template demo` + CI gate still to do); remaining: D — the
-  single **v0.6.0** release (the catalog keeps shipping, so one breaking bump — migrate with
-  `--all-used`). See [slim-core-plan.md](docs/slim-core-plan.md))* — `ssg add <kind> <name>`
+  ✅ C — `ssg init [dir]` (blank scaffold **and** `--template demo` degit; auto engine-re-pin + a
+  standing CI gate deferred); remaining: D — the single **v0.6.0** release (the catalog keeps shipping,
+  so one breaking bump — migrate with `--all-used`). See
+  [slim-core-plan.md](docs/slim-core-plan.md))* — `ssg add <kind> <name>`
   scaffolds a material into a site (or copies an engine one), **and the engine eventually stops
   shipping example/default materials that every site silently inherits**. This fixes three
   pains: example generators producing pages nobody asked for (no empty-override needed);

@@ -344,10 +344,18 @@ C. **`ssg init`.** ✅ **Blank scaffold done** (`feat/slim-core`): `ssg init [di
    a minimal `components/_layout/_layout.html` (no header/footer — adopt via `ssg add material`), and a
    welcome `pages/index`. Reuses the scaffolder's `place()` (never clobbers unless `--force`;
    `--dry-run`). Composed from a centralised `STUBS.init*` set. A fresh `ssg init && ssg build` builds a
-   page (fixed the `assets/images` ENOENT en route; smoke builds a blank site). **Remaining:**
-   `--template demo` (git-clone the demo files, history-stripped, engine re-pinned) + the **CI gate**
-   that builds the demo against engine `main` — needs the external `brickwork-demo` repo, so it's a
-   separate pass.
+   page (fixed the `assets/images` ENOENT en route; smoke builds a blank site).
+   ✅ **`--template demo` done** (`lib/init-template.js`): degit — shallow-clone the demo repo, copy its
+   files **except** `.git` (history) and top-level `engine/` (the submodule), never clobbering the
+   target's own `.git`/files (unless `--force`; `--dry-run` previews). Verified end-to-end: `ssg init
+   <dir> --template demo` → `ssg add material --all-used` → `ssg build` produces the full demo (10
+   pages, real header/footer; the demo's customized `carousel` correctly reported as drift, not
+   overwritten) — which doubles as the **CI-gate check** (the demo builds clean against the current
+   engine). **Remaining (hardening, deferred):** the automatic **engine re-pin** (write the target's
+   engine submodule to the version that ran `init` — needs git plumbing in the target) and a standing
+   **CI gate** in the demo repo (build it against engine `main` on every push). For now the user wires
+   the engine submodule (printed next-steps); the smoke suite stays offline (only the unknown-template
+   error path is tested — the real clone is verified out of band).
 D. **Ship `v0.6.0`** (single release — see "Two phases"). Loud migration note: "v0.6.0 no longer
    auto-provides default components — run `ssg add material --all-used` when you bump so your site owns
    them." The **catalog stays shipped**, so `--all-used` remains available and the migration is

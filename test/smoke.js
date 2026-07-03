@@ -679,6 +679,12 @@ try {
   const home = fs.readFileSync(path.join(initRoot, 'build', 'index.html'), 'utf8');
   check('ssg init: the blank site builds a page (welcome + global.css, no assets/images needed)',
     /Welcome to brickwork/.test(home) && /assets\/css\/global\.css/.test(home));
+  // --template wiring: an unknown template errors (offline-safe; the real `--template demo` clone is a
+  // network + CI-gated path, verified out of band — not run in smoke).
+  let tmplExit = 0, tmplErr = '';
+  try { execSync(`node cli.js init "${itmpArg}/x" --template bogus`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { tmplExit = e.status || 1; tmplErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('ssg init --template: unknown template errors', tmplExit !== 0 && /unknown template "bogus"/.test(tmplErr));
 } finally {
   try { fs.rmSync(itmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
