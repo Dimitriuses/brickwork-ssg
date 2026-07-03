@@ -170,13 +170,16 @@ it needs a window-based generation model (below) and is a large task in its own 
   [docs/tooling-and-distribution-plan.md](docs/tooling-and-distribution-plan.md).
 
 ### Pages & assets
-- **Configurable site directories** *(likely v0.6.1 — enables a `src/` layout)* — the engine hardcodes
-  `SITE_ROOT/pages`, `/components`, `/generators`, `/assets`. Add a **`dirs`** block in `config.json` so
-  a site can relocate them — e.g. pages/components/generators under `src/`, assets under `shared/assets`
-  — defaulting to today's layout (backward-compatible). **Decided shape: granular per-dir** —
+- **✅ Done (`feat/configurable-dirs`) — Configurable site directories** — a **`dirs`** block in
+  `config.json` relocates `pages` / `components` / `generators` / `assets` and the build `output` dir,
+  each defaulting to today's layout (backward-compatible). Resolved in one place (`lib/dirs.js`) and
+  used by the build **and** the tooling (`ssg add` / `--all-used` / scaffolders), so e.g.
   `"dirs": { "pages": "src/pages", "components": "src/components", "generators": "src/generators",
-  "assets": "shared/assets" }`. Deferred from the v0.6.0 site migration (both sites moved to v0.6.0
-  first; the `src/`/`shared` restructure follows once this lands).
+  "assets": "shared/assets", "output": "build" }` keeps source under `src/` and assets under
+  `shared/assets`. Supersedes the never-read `build.*_dir` config (dead code). `config.json` +
+  `shared/database.json` stay site-root-relative; `test/` isn't relocatable yet. **Remaining:** the
+  actual `src/`/`shared` restructure of the two sites (move the folders, add the `dirs` block, drop the
+  private site's dead `build` block) — sites migrate when ready.
 - **Selectable pagination modes** — **single-page** (client-side, all cards rendered;
   today's behavior) is available now. **Multi-page** (build-time HTML splitting, so the HTML
   stops scaling linearly with item count) is **deferred**: it needs the *window-based

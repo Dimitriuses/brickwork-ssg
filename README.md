@@ -17,9 +17,21 @@ runtime dependencies for the build itself.
 my-site/
 ├── config.json          # site name, contact, social, nav, logo
 ├── pages/               # <name>/<name>.json (+ optional <name>.html)
+├── components/          # the materials this site owns (see below)
 ├── assets/              # images, global.css, global.js
 └── shared/              # database.json + collections (e.g. products/)
 ```
+
+`pages`, `components`, `generators`, `assets`, and the build `output` folder are **relocatable** via a
+`config.json` `dirs` block — each defaults to the above, so it's optional. For example, to keep source
+under `src/` and assets alongside your data:
+
+```json
+{ "dirs": { "pages": "src/pages", "components": "src/components",
+            "generators": "src/generators", "assets": "shared/assets", "output": "build" } }
+```
+
+`config.json` and `shared/database.json` stay at the site root.
 
 ## Use it in a site (git submodule)
 
