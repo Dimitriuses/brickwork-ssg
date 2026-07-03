@@ -480,21 +480,81 @@ try {
   try { fs.rmSync(dtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
-// ssg add CLI integration (colour off in a pipe).
+// ssg add material — CLI integration (colour off in a pipe).
 const atmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwadd-'));
 const atmpArg = atmp.replace(/\\/g, '/');
 try {
-  const out = execSync(`node cli.js add carousel --site "${atmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
-  check('ssg add: deploys the material + summary',
+  const out = execSync(`node cli.js add material carousel --site "${atmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  check('ssg add material: deploys the material + summary',
     /added 4 file\(s\) for "carousel"/.test(out) &&
     fs.existsSync(path.join(atmp, 'components', 'carousel', 'carousel.html')));
   let addExit = 0, addErr = '';
-  try { execSync(`node cli.js add nope-material --site "${atmpArg}"`, { cwd: root, stdio: 'pipe' }); }
+  try { execSync(`node cli.js add material nope-material --site "${atmpArg}"`, { cwd: root, stdio: 'pipe' }); }
   catch (e) { addExit = e.status || 1; addErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
-  check('ssg add: unknown material errors (non-zero exit)',
+  check('ssg add material: unknown material errors (non-zero exit)',
     addExit !== 0 && /no material "nope-material"/.test(addErr));
+  // Unknown/missing kind is a usage error.
+  let kindExit = 0, kindErr = '';
+  try { execSync(`node cli.js add bogus foo --site "${atmpArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { kindExit = e.status || 1; kindErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('ssg add: unknown kind errors with usage',
+    kindExit !== 0 && /unknown kind "bogus"/.test(kindErr));
 } finally {
   try { fs.rmSync(atmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
+// ssg add <kind> — scaffolders (lib/scaffold.js): page / component / generator / builder.
+const stmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwscaf-'));
+const stmpArg = stmp.replace(/\\/g, '/');
+try {
+  // page: stubs incl. the .json schema; --layout overrides the default _layout.
+  const pout = execSync(`node cli.js add page about --layout=marketing --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  const pjson = JSON.parse(fs.readFileSync(path.join(stmp, 'pages', 'about', 'about.json'), 'utf8'));
+  check('scaffold page: html/json/style/script + --layout applied',
+    /created 4 file\(s\) for page "about"/.test(pout) &&
+    fs.existsSync(path.join(stmp, 'pages', 'about', 'about.html')) &&
+    fs.existsSync(path.join(stmp, 'pages', 'about', 'style.css')) &&
+    fs.existsSync(path.join(stmp, 'pages', 'about', 'script.js')) &&
+    pjson.page === 'about' && pjson.layout === 'marketing' && Array.isArray(pjson.components));
+
+  // never clobber without --force; --force overwrites.
+  fs.writeFileSync(path.join(stmp, 'pages', 'about', 'about.html'), 'MINE');
+  execSync(`node cli.js add page about --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const kept = fs.readFileSync(path.join(stmp, 'pages', 'about', 'about.html'), 'utf8');
+  execSync(`node cli.js add page about --force --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const forced = fs.readFileSync(path.join(stmp, 'pages', 'about', 'about.html'), 'utf8');
+  check('scaffold: refuses to clobber; --force overwrites', kept === 'MINE' && forced !== 'MINE');
+
+  // component: --folder places files, --register writes the registry remap.
+  execSync(`node cli.js add component fancyBox --folder=widgets --register --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const creg = JSON.parse(fs.readFileSync(path.join(stmp, 'components', 'registry.json'), 'utf8'));
+  check('scaffold component: --folder places + --register remaps',
+    fs.existsSync(path.join(stmp, 'components', 'widgets', 'fancyBox.html')) &&
+    fs.existsSync(path.join(stmp, 'components', 'widgets', 'style.css')) && creg.fancyBox === 'widgets');
+
+  // generator: file + registry entry (generators resolve by registry name).
+  execSync(`node cli.js add generator news --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const greg = JSON.parse(fs.readFileSync(path.join(stmp, 'generators', 'registry.json'), 'utf8'));
+  check('scaffold generator: file + registry entry',
+    fs.existsSync(path.join(stmp, 'generators', 'generate-news.js')) && greg.news === 'generate-news.js');
+
+  // builder: attaches <name>.build.js to an existing component; errors if the component is missing.
+  execSync(`node cli.js add builder fancyBox --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' });
+  check('scaffold builder: attaches build.js to the existing component (registry folder)',
+    fs.existsSync(path.join(stmp, 'components', 'widgets', 'fancyBox.build.js')));
+  let bExit = 0, bErr = '';
+  try { execSync(`node cli.js add builder ghost --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { bExit = e.status || 1; bErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('scaffold builder: errors when the component does not exist',
+    bExit !== 0 && /no component "ghost"/.test(bErr));
+
+  // --dry-run writes nothing.
+  const dout = execSync(`node cli.js add page ghostpage --dry-run --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  check('scaffold: --dry-run reports without writing',
+    /would create 4 file\(s\) for page "ghostpage"/.test(dout) &&
+    !fs.existsSync(path.join(stmp, 'pages', 'ghostpage')));
+} finally {
+  try { fs.rmSync(stmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
 // --- lib/components.js (shared resolver) + lib/used-materials.js (used-set walk) ---
@@ -513,8 +573,8 @@ check('used-materials: sub-components collapse to their parent folder (deploy fo
   uc.folders.includes('products') && uc.folders.includes('faq') &&
   !uc.folders.includes('productCard') && !uc.folders.includes('faqItem'));
 
-// Acceptance: `ssg add --all-used` on an inheriting site -> it owns every used material folder
-// (the completeness the slim core relies on). Sub-components + dependencies come along.
+// Acceptance: `ssg add material --all-used` on an inheriting site -> it owns every used material
+// folder (the completeness the slim core relies on). Sub-components + dependencies come along.
 const utmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwall-'));
 const utmpArg = utmp.replace(/\\/g, '/');
 try {
@@ -522,10 +582,10 @@ try {
   fs.writeFileSync(path.join(utmp, 'pages', 'index', 'index.json'),
     JSON.stringify({ page: 'index', layout: '_layout', components: [{ name: 'hero', vars: {} }, { name: 'faq', vars: {} }] }));
   fs.writeFileSync(path.join(utmp, 'config.json'), JSON.stringify({ site: { name: 'T' }, nav: [] }));
-  const out = execSync(`node cli.js add --all-used --site "${utmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  const out = execSync(`node cli.js add material --all-used --site "${utmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
   const folders = usedComponentNames({ siteRoot: utmp, engineRoot: root }).folders;
   const ownsAll = folders.every(f => fs.existsSync(path.join(utmp, 'components', f)));
-  check('ssg add --all-used: inheriting site ends up owning every used material folder',
+  check('ssg add material --all-used: inheriting site ends up owning every used material folder',
     /across \d+ material\(s\)/.test(out) && ownsAll &&
     fs.existsSync(path.join(utmp, 'components', 'faq', 'faqItem.html')) &&   // sub-component came along
     fs.existsSync(path.join(utmp, 'components', 'contactIcons')));          // footer dependency pulled in
