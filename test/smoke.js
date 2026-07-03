@@ -49,6 +49,10 @@ const index = fs.existsSync(path.join(buildDir, 'index.html'))
 check('index.html exists', fs.existsSync(path.join(buildDir, 'index.html')));
 check('layout: <header> present', index.includes('<header'));
 check('layout: <footer> present', index.includes('<footer'));
+// Header/footer render via {{COMPONENT:header/footer}} (declared _layout dependencies); the per-page
+// header_theme reaches the header component as HEADER_MODE -> data-navbar-style.
+check('layout: header component receives the theme (HEADER_MODE via {{COMPONENT:header}})',
+  /<header[^>]*data-navbar-style="(light|dark)"/.test(index));
 
 // Phase A: a site-authored component (example/components/pricing) renders with
 // its own template + build logic + CSS, resolved site-first by the engine.
@@ -527,6 +531,33 @@ try {
     fs.existsSync(path.join(utmp, 'components', 'contactIcons')));          // footer dependency pulled in
 } finally {
   try { fs.rmSync(utmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
+// _layout is now a first-class component (goes through buildComponent): a site _layout with a
+// _layout.build.js has its build script honoured — impossible when the layout was loaded specially.
+const ltmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwlayout-'));
+const ltmpArg = ltmp.replace(/\\/g, '/');
+try {
+  fs.mkdirSync(path.join(ltmp, 'pages', 'index'), { recursive: true });
+  fs.mkdirSync(path.join(ltmp, 'components', '_layout'), { recursive: true });
+  fs.mkdirSync(path.join(ltmp, 'assets', 'images'), { recursive: true });
+  fs.writeFileSync(path.join(ltmp, 'config.json'), JSON.stringify({ site: { name: 'L' }, nav: [] }));
+  fs.writeFileSync(path.join(ltmp, 'pages', 'index', 'index.json'),
+    JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  fs.writeFileSync(path.join(ltmp, 'pages', 'index', 'index.html'), '<main>hi</main>');
+  fs.writeFileSync(path.join(ltmp, 'components', '_layout', '_layout.html'),
+    '<!doctype html><html><head><title>{{PAGE_TITLE}}</title></head><body>{{CONTENT}}</body></html>');
+  fs.writeFileSync(path.join(ltmp, 'components', '_layout', '_layout.build.js'),
+    "module.exports = { build(vars, loadComponent, replaceVariables) { return '<!--LAYOUT-BUILD-RAN-->' + replaceVariables(loadComponent('_layout'), vars); } };");
+  let outHtml = '';
+  try {
+    execSync(`node cli.js build --site "${ltmpArg}"`, { cwd: root, stdio: 'pipe' });
+    outHtml = fs.readFileSync(path.join(ltmp, 'build', 'index.html'), 'utf8');
+  } catch (e) { outHtml = ''; }
+  check('_layout runs through buildComponent (a layout build.js is honoured)',
+    outHtml.includes('<!--LAYOUT-BUILD-RAN-->') && outHtml.includes('<main>hi</main>'));
+} finally {
+  try { fs.rmSync(ltmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
 done();

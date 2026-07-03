@@ -174,3 +174,12 @@ it needs a window-based generation model (below) and is a large task in its own 
   template page. Prove the data + indexing tracks first (done in v0.4), then decide whether routing
   earns its complexity; keep `generatorOptions` in the page config until then. (Was Track D of the
   [material-indexing plan](docs/material-indexing-plan.md).)
+
+### Documentation & housekeeping
+- **End-user documentation** — a task-oriented guide for people *building sites* with the engine (not
+  engine internals): the `ssg` commands (`build`/`test`/`add`/`init`), `config.json`, pages + the data
+  model + template `map`, components + the `ssg add` scaffolding, theming, and the `log` config.
+  Today's `docs/` are design/decision records for maintainers; end users need getting-started →
+  recipes → reference. (Own task.)
+- **Known issues / structural inconsistencies** are logged in
+  [docs/known-issues.md](docs/known-issues.md). Add future bugs there.

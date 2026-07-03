@@ -234,9 +234,11 @@ function buildPage(pageConfig, pageName) {
   }
   builtPageNames.add(pageData.page);
 
-  // Load layout
-  const layout = loadComponent(pageData.layout || '_layout');
-  
+  // The layout is a first-class component: it's built via buildComponent below (so it can carry a
+  // <name>.build.js / subComponents / {{COMPONENT}} like any other), with CONTENT + the chrome
+  // (HEADER/FOOTER/PAGE_TITLE/…) passed as its component vars.
+  const layoutName = pageData.layout || '_layout';
+
   // Build components
   let componentsHtml = '';
   const usedComponents = new Set(); // Track which components have been placed
@@ -314,14 +316,6 @@ function buildPage(pageConfig, pageName) {
     }
   });
 
-  // Build header based on theme
-  const headerMode = pageData.header_theme || 'light';
-  // const headerTemplate = headerMode === 'dark' ? 'header-dark' : 'header-light';
-  const headerHtml = buildComponent("header", flatConfig);
-  
-  // Build footer
-  const footerHtml = buildComponent('footer', flatConfig);
-  
   // Collect all CSS files (including page-specific). `assetsFrom`, set on generated
   // pages from a template, links the template page's own asset.
   const cssFiles = collectComponentCSS(pageData.components || [], pageData.page, pageData.assetsFrom);
@@ -341,15 +335,16 @@ function buildPage(pageConfig, pageName) {
     PAGE_TITLE: pageData.title || flatConfig.SITE_NAME,
     PAGE_DESCRIPTION: pageData.description || flatConfig.SITE_DESCRIPTION,
     SITE_NAME: flatConfig.SITE_NAME,
-    HEADER: raw(headerHtml),       // pre-built HTML fragments - insert verbatim
     CONTENT: raw(mainContent),
-    FOOTER: raw(footerHtml),
-    HEADER_MODE: headerMode,
+    // The page's raw header_theme; the _layout component derives HEADER_MODE from it (defaulting
+    // to 'light') and passes that to the body attribute + the header — so the mode lives with the
+    // layout, not as build-wide global processing here.
+    HEADER_THEME: pageData.header_theme,
     HEAD_EXTRA: raw(cssLinks),
     BODY_EXTRA: raw(jsScripts)
   };
   
-  const finalHtml = normalizeWebPaths(replaceVariables(layout, pageVars));
+  const finalHtml = normalizeWebPaths(buildComponent(layoutName, pageVars));
 
   // Write output
   const outputFile = path.join(BUILD_DIR, `${pageData.page}.html`);
@@ -519,8 +514,8 @@ function expandTemplatePage(templateFile, templateConfig) {
 // page-specific asset. `kind` is 'css' or 'js'; they differ only in the source
 // filename and which base components are always included.
 const ASSET_KINDS = {
-  css: { sourceFile: 'style.css', base: ['header', 'footer'] },
-  js: { sourceFile: 'script.js', base: ['header'] }
+  css: { sourceFile: 'style.css', base: ['_layout'] },
+  js: { sourceFile: 'script.js', base: ['_layout'] }
 };
 
 function collectComponentAssets(kind, components, pageName, assetBase) {
