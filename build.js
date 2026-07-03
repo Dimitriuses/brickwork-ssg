@@ -827,9 +827,13 @@ if (fs.existsSync(BUILD_DIR)) {
 }
 fs.mkdirSync(BUILD_DIR, { recursive: true });
 
-// Copy assets (excluding CSS and JS which we handle separately)
-copyDirectory(path.join(ASSETS_DIR, 'images'), path.join(BUILD_DIR, 'assets', 'images'));
-log.info('[ASSETS] Copied images to build/assets/', { phase: 'assets' });
+// Copy assets (excluding CSS and JS which we handle separately). Guard the copy: a minimal/fresh
+// site (e.g. one just made by `ssg init`) may have no assets/images/ yet — skip rather than ENOENT.
+const imagesDir = path.join(ASSETS_DIR, 'images');
+if (fs.existsSync(imagesDir)) {
+  copyDirectory(imagesDir, path.join(BUILD_DIR, 'assets', 'images'));
+  log.info('[ASSETS] Copied images to build/assets/', { phase: 'assets' });
+}
 
 // Copy component CSS and JS
 copyComponentCSS();

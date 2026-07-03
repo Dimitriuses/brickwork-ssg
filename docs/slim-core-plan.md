@@ -339,8 +339,15 @@ A. ✅ **Relocate defaults to `catalog/`** (`feat/slim-core`). Moved `engine/com
 B. ✅ **Not-installed error** (`feat/slim-core`). `loadComponent` on a miss now throws
    `Component "<name>" is not installed … run: ssg add material <name>`; the build already fails
    loudly on the throw. smoke covers it.
-C. **`ssg init`.** The blank scaffold (files above) + `--template demo` (git-clone the demo files,
-   history-stripped, engine re-pinned). Add the **CI gate** that builds the demo against engine `main`.
+C. **`ssg init`.** ✅ **Blank scaffold done** (`feat/slim-core`): `ssg init [dir]` (default cwd, works
+   into a subdir like `ssg init ./src`) emits `package.json`, `config.json`, `assets/css|js/global.*`,
+   a minimal `components/_layout/_layout.html` (no header/footer — adopt via `ssg add material`), and a
+   welcome `pages/index`. Reuses the scaffolder's `place()` (never clobbers unless `--force`;
+   `--dry-run`). Composed from a centralised `STUBS.init*` set. A fresh `ssg init && ssg build` builds a
+   page (fixed the `assets/images` ENOENT en route; smoke builds a blank site). **Remaining:**
+   `--template demo` (git-clone the demo files, history-stripped, engine re-pinned) + the **CI gate**
+   that builds the demo against engine `main` — needs the external `brickwork-demo` repo, so it's a
+   separate pass.
 D. **Ship `v0.6.0`** (single release — see "Two phases"). Loud migration note: "v0.6.0 no longer
    auto-provides default components — run `ssg add material --all-used` when you bump so your site owns
    them." The **catalog stays shipped**, so `--all-used` remains available and the migration is

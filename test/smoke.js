@@ -663,4 +663,24 @@ try {
   try { fs.rmSync(ntmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// ssg init: a blank project builds out of the box — into a subdir (like `ssg init ./src`), with no
+// assets/images/ present (guards the ENOENT-on-missing-images fix).
+const itmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwinit-'));
+const itmpArg = itmp.replace(/\\/g, '/');
+try {
+  const iout = execSync(`node cli.js init "${itmpArg}/src"`, { cwd: root, stdio: 'pipe' }).toString();
+  const initRoot = path.join(itmp, 'src');
+  const has = (f) => fs.existsSync(path.join(initRoot, f));
+  check('ssg init: scaffolds a blank site into a subdir',
+    /created 7 file\(s\)/.test(iout) && has('config.json') && has('package.json') &&
+    has('components/_layout/_layout.html') && has('pages/index/index.json') &&
+    has('assets/css/global.css') && has('assets/js/global.js'));
+  execSync(`node cli.js build --site "${itmpArg}/src"`, { cwd: root, stdio: 'pipe' });
+  const home = fs.readFileSync(path.join(initRoot, 'build', 'index.html'), 'utf8');
+  check('ssg init: the blank site builds a page (welcome + global.css, no assets/images needed)',
+    /Welcome to brickwork/.test(home) && /assets\/css\/global\.css/.test(home));
+} finally {
+  try { fs.rmSync(itmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();

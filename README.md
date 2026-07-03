@@ -29,6 +29,7 @@ A site is a separate repo that embeds this engine as a submodule and runs it:
 git submodule add <brickwork-ssg-repo-url> engine   # embed the engine at engine/
 git submodule update --init --recursive
 
+node engine/cli.js init [dir]            # scaffold a blank buildable site into dir (default .)
 node engine/cli.js build                 # build the site (cwd) into build/
 node engine/cli.js build --site path     # or build any site directory
 node engine/cli.js admin                 # product admin on http://localhost:3000

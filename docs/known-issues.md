@@ -52,7 +52,7 @@ for one release, then drop the old).
 
 **Status.** Open.
 
-## Build crashes hard if a site has no `assets/images/`
+## ✅ Build crashes hard if a site has no `assets/images/` *(fixed)*
 
 **Symptom.** `build.js` runs `copyDirectory(path.join(ASSETS_DIR, 'images'), …)` unconditionally at
 startup; if the site has no `assets/images/` folder, `fs.readdirSync` throws `ENOENT` and the whole
@@ -63,10 +63,11 @@ scaffolded site.)
 images folder yet, so the first build crashes ungracefully. It also makes minimal test fixtures
 awkward (they must create an empty `assets/images/`).
 
-**Fix (sketch).** Guard the copy — `if (fs.existsSync(src)) copyDirectory(...)` — like the other
-optional copies; a one-liner, low risk. (`ssg init` should also seed the folder.)
+**Fix.** ✅ Done (`feat/slim-core`). The copy is guarded — `if (fs.existsSync(imagesDir)) copyDirectory(...)`
+— so a site with no `assets/images/` builds cleanly (skips the copy + its log line). Surfaced while
+building an `ssg init` blank site; a smoke check now builds a blank `ssg init` site (no images) to guard it.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## ✅ Header/footer are hard-wired globally, not linked to `_layout` *(fixed)*
 

@@ -35,14 +35,35 @@ for (let i = 1; i < argv.length; i++) {
 
 function fail(message) {
   console.error(message);
-  console.error('Usage: ssg <build|admin|test|add> [--site <dir>]');
+  console.error('Usage: ssg <build|admin|test|add|init> [--site <dir>]');
+  console.error('       ssg init [dir] [--force] [--dry-run]   scaffold a blank buildable site into dir');
   console.error('       ssg add <page|component|generator|builder|test> <name>   scaffold new material');
   console.error('       ssg add material <name> | --all-used [--force] [--dry-run]   adopt engine material(s)');
   process.exit(1);
 }
 
-if (!['build', 'admin', 'test', 'add'].includes(command)) {
+if (!['build', 'admin', 'test', 'add', 'init'].includes(command)) {
   fail(command ? `Unknown command: ${command}` : 'No command given.');
+}
+
+// `ssg init [dir]` — scaffold a blank site into dir (default cwd). The dir may not exist yet, so this
+// runs before the site-existence checks + chdir below.
+if (command === 'init') {
+  const targetDir = path.resolve(process.cwd(), positionals[0] || '.');
+  require('./lib/log').configure(require('./lib/log-config').resolveLogOptions({}, 'init', argv));
+  const log = require('./lib/log');
+  const { scaffoldInit } = require('./lib/scaffold');
+  const result = scaffoldInit(targetDir, { force: flags.force, dryRun: flags.dryRun });
+  const verb = flags.dryRun ? 'would create' : 'created';
+  result.created.forEach(f => log.info(`  + ${f}`, { phase: 'init' }));
+  result.skipped.forEach(f => log.debug(`  = ${f} (exists — use --force to overwrite)`, { phase: 'init' }));
+  log.flushWarnings();
+  const rel = path.relative(process.cwd(), targetDir) || '.';
+  log.success(`${verb} ${result.created.length} file(s) — blank site in ${rel}`, { phase: 'init' });
+  if (!flags.dryRun && result.created.length) {
+    log.info('next: add the engine as a submodule (git submodule add <url> engine), then `npm run build`', { phase: 'init' });
+  }
+  process.exit(0);
 }
 
 const siteRoot = path.resolve(process.cwd(), site);
