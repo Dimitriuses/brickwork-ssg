@@ -16,15 +16,19 @@ are one flat bag.
 identify the page. It's also inconsistent: content `components` are `{ name, vars }`, but the layout
 (also a component) is a bare `layout: "_layout"` string with its params scattered as sibling keys.
 
-**Fix.** ✅ Done (`feat/layout-vars`). `buildPage` now accepts `layout` as a **string** *or* a
-**`{ name, vars }`** object (same shape as a `components` entry), so layout params group under it:
+**Fix.** ✅ Done. `buildPage` accepts `layout` as a **string** *or* a **`{ name, vars }`** object (same
+shape as a `components` entry), so layout params group under it:
 `"layout": { "name": "_layout", "vars": { "header_theme": "dark" } }`. `title`/`description` stay
-page-level (page metadata / future SEO — still resolved to `PAGE_TITLE`/`PAGE_DESCRIPTION`).
-Backward-compatible: a string `layout` still works, and a top-level `header_theme` is honoured as a
-deprecated fallback (`layout.vars.header_theme ?? pageData.header_theme`). A smoke check covers both
-forms. **Follow-up:** migrate the sites' pages to the object form, then drop the top-level fallback.
+page-level (page metadata / future SEO — resolved to `PAGE_TITLE`/`PAGE_DESCRIPTION`). Shipped in two
+steps: **v0.6.4** added the grouped form (with a temporary top-level `header_theme` fallback); **v0.6.5**
+completed it — both sites migrated their pages to `layout.vars`, the deprecated fallback was **removed**,
+and `header_theme` is now processed **entirely by `_layout`**: `buildPage` just forwards `layout.vars`
+(the `...layoutVars` spread — the build does no layout-specific processing) and the `_layout` build
+script reads `vars.header_theme` → `HEADER_MODE`. (The same audit found + fixed a latent `used-materials`
+crash on an object-form `layout` under `ssg add material --all-used`.) Smoke covers both forms.
 
-**Status.** ✅ Fixed (schema supports the grouped form; sites migrate next).
+**Status.** ✅ Fixed (grouped form in v0.6.4; sites migrated, fallback dropped, `header_theme` fully
+layout-handled in v0.6.5).
 
 ## ✅ `{{COMPONENT:x}}` in page CONTENT is expanded by the layout pass (commented / undeclared too) — v0.6.0 regression *(fixed)*
 
