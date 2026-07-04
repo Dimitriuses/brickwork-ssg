@@ -151,15 +151,14 @@ it needs a window-based generation model (below) and is a large task in its own 
 - **npm-distributed third-party plugins/themes + a material registry** — third-party/shared
   distribution (e.g. a community "materials" project people add to), once the deploy model
   is proven.
-- **Admin panel extension** *(own track — substantial)* — today `ssg admin` is a single Express +
-  Multer server (`shared/admin/server.js`) **hardcoded to the products/images CRUD**. Make it
-  **per-site extensible**: drive which collections/fields it edits from the site's `data_model` /
-  config instead of hardcoding, and let a site **own + customize** it (an `ssg add`-style *adopt*, once
-  the slim-core catalog exists — likely `ssg add material admin`, not a new scaffolding kind, since the
-  admin is a singleton, not a named material). Open questions: the declarative admin surface (schema
-  from `data_model`?), auth/access, image handling beyond products, and whether the server becomes a
-  catalog material or stays core. Considered as an `ssg add` kind and **deferred** — it doesn't fit the
-  `<kind> <name>` author-new model and needs its own design pass first.
+- **Admin panel extension** *(own track — substantial; drafting)* — today `ssg admin` is a single
+  Express + Multer server (`shared/admin/server.js`) **hardcoded to the products/images CRUD**. Make it
+  **per-site extensible**: drive which collections/fields it edits from each collection's `data_model`
+  instead of hardcoding, let a site **own + customize** it via **`ssg add admin`** (adopt/copy into
+  `--folder` › `dirs.admin` › `<data-root>/admin/`), and make **`database.json`'s location
+  configurable** (it's hardcoded in `build.js` *and* the admin today). Drafted with notes, caveats, and
+  open questions — chiefly the `object`-part **field schema** (the model surfaces the parsed object but
+  not its fields) — in **[docs/admin-extension-plan.md](docs/admin-extension-plan.md)**.
 - **✅ Done (v0.5.0–v0.5.1) — Build/test output overhaul (terminal UX)**: a zero-dependency output
   module (`lib/log.js` + `lib/colors.js`) all build/test output flows through — traffic-light colour,
   verbosity levels (`--quiet`/`--verbose`), a `config.json` `log` block + `--log key=value` flags, an
