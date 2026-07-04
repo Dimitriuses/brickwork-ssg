@@ -29,7 +29,7 @@ A custom static-site generator. The build is driven by [build.js](build.js) (ent
 
 `build.js` resolves two roots so one engine can build many sites:
 - **`ENGINE_ROOT`** (`__dirname`) — shared code: `build.js`, `generators/`, `lib/`, `shared/admin/`, and the **`catalog/`** of deployable materials (see slim-core note below).
-- **`SITE_ROOT`** (`process.cwd()`) — per-site: `config.json`, `pages/`, `assets/`, `shared/` data, `components/` (the materials the site owns), and the `build/` output. **`pages`/`components`/`generators`/`assets` + the output dir are relocatable** via a `config.json` `dirs` block (`lib/dirs.js`; e.g. source under `src/`, assets under `shared/assets`) — defaults to this layout; `config.json` + `shared/database.json` stay at the root.
+- **`SITE_ROOT`** (`process.cwd()`) — per-site: `config.json`, `pages/`, `assets/`, `shared/` data, `components/` (the materials the site owns), and the `build/` output. **the whole workspace is relocatable** via a `config.json` `dirs` block (`lib/dirs.js`): `pages`/`components`/`generators`/`assets` + the `output`/`test`/`log` folders (e.g. source under `src/`, assets under `shared/assets`) — defaults to this layout; `dirs.log` supersedes `log.file.dir`; `config.json` + `shared/database.json` stay at the root.
 
 Components resolve **site-first, then engine**, **per file** (`resolveComponentFile`): a site can override just `header/header.html` and keep the engine's `header.build.js`, or ship a whole new component. A site `components/registry.json` may map a component name to a folder. The `ssg` CLI chdir's into the requested `--site` so `SITE_ROOT` = cwd.
 

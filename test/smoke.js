@@ -780,4 +780,25 @@ try {
   try { fs.rmSync(dirtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// `dirs` also covers the test + log folders (the log dir supersedes log.file.dir — one place).
+const tltmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwtl-'));
+const tltmpArg = tltmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(tltmp, p)), { recursive: true }); fs.writeFileSync(path.join(tltmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'TL' }, nav: [], dirs: { test: 'checks', log: 'logs' }, log: { file: { format: 'jsonl' } } }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main>hi</main>');
+  fs.mkdirSync(path.join(tltmp, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js add test homepage --site "${tltmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const testOut = execSync(`node cli.js test --site "${tltmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  check('dirs: configurable test dir (scaffold + discovery) + log dir (sink)',
+    fs.existsSync(path.join(tltmp, 'checks', 'homepage.test.js')) && !fs.existsSync(path.join(tltmp, 'test')) &&
+    /homepage: homepage renders/.test(testOut) &&
+    fs.existsSync(path.join(tltmp, 'logs')) && fs.readdirSync(path.join(tltmp, 'logs')).some(f => f.endsWith('.jsonl')) &&
+    !fs.existsSync(path.join(tltmp, 'log')));
+} finally {
+  try { fs.rmSync(tltmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();

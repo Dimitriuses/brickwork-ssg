@@ -22,15 +22,16 @@ my-site/
 └── shared/              # database.json + collections (e.g. products/)
 ```
 
-`pages`, `components`, `generators`, `assets`, and the build `output` folder are **relocatable** via a
-`config.json` `dirs` block — each defaults to the above, so it's optional. For example, to keep source
-under `src/` and assets alongside your data:
+The whole workspace is **relocatable** via a `config.json` `dirs` block — `pages`, `components`,
+`generators`, `assets`, and the build `output`, `test`, and `log` folders. Each defaults to the layout
+above, so it's optional. For example, to keep source under `src/` and assets alongside your data:
 
 ```json
-{ "dirs": { "pages": "src/pages", "components": "src/components",
-            "generators": "src/generators", "assets": "shared/assets", "output": "build" } }
+{ "dirs": { "pages": "src/pages", "components": "src/components", "generators": "src/generators",
+            "assets": "shared/assets", "output": "build", "test": "test", "log": "log" } }
 ```
 
+`dirs.log` is the single source for the log file-sink folder (it supersedes `log.file.dir`).
 `config.json` and `shared/database.json` stay at the site root.
 
 ## Use it in a site (git submodule)

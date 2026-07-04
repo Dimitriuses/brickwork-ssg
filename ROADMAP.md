@@ -170,16 +170,15 @@ it needs a window-based generation model (below) and is a large task in its own 
   [docs/tooling-and-distribution-plan.md](docs/tooling-and-distribution-plan.md).
 
 ### Pages & assets
-- **✅ Done (`feat/configurable-dirs`) — Configurable site directories** — a **`dirs`** block in
-  `config.json` relocates `pages` / `components` / `generators` / `assets` and the build `output` dir,
+- **✅ Done — Configurable site directories** — a **`dirs`** block in `config.json` relocates the whole
+  workspace: `pages` / `components` / `generators` / `assets` and the `output` / `test` / `log` folders,
   each defaulting to today's layout (backward-compatible). Resolved in one place (`lib/dirs.js`) and
-  used by the build **and** the tooling (`ssg add` / `--all-used` / scaffolders), so e.g.
-  `"dirs": { "pages": "src/pages", "components": "src/components", "generators": "src/generators",
-  "assets": "shared/assets", "output": "build" }` keeps source under `src/` and assets under
-  `shared/assets`. Supersedes the never-read `build.*_dir` config (dead code). `config.json` +
-  `shared/database.json` stay site-root-relative; `test/` isn't relocatable yet. **Remaining:** the
-  actual `src/`/`shared` restructure of the two sites (move the folders, add the `dirs` block, drop the
-  private site's dead `build` block) — sites migrate when ready.
+  used by the build, the tooling (`ssg add` / `--all-used` / scaffolders), the test runner, and the log
+  sink (`dirs.log` supersedes `log.file.dir`), so e.g. `"dirs": { "pages": "src/pages", "components":
+  "src/components", "generators": "src/generators", "assets": "shared/assets" }` keeps source under
+  `src/` and assets under `shared/assets`. Supersedes the never-read `build.*_dir` config (dead code).
+  `config.json` + `shared/database.json` stay site-root-relative. Both sites were restructured to the
+  `src/`/`shared` layout (`feat/configurable-dirs` shipped the core; `output`/`test`/`log` added after).
 - **Selectable pagination modes** — **single-page** (client-side, all cards rendered;
   today's behavior) is available now. **Multi-page** (build-time HTML splitting, so the HTML
   stops scaling linearly with item count) is **deferred**: it needs the *window-based
