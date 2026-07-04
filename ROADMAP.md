@@ -198,6 +198,22 @@ it needs a window-based generation model (below) and is a large task in its own 
   earns its complexity; keep `generatorOptions` in the page config until then. (Was Track D of the
   [material-indexing plan](docs/material-indexing-plan.md).)
 
+### Component & template model
+- **Component slots / `<Component>` syntax** *(design idea — parked)* — augment/replace the flat
+  `{{COMPONENT:name}}` + global `{{CONTENT}}` model with a **slot** model: `<Name>…children…</Name>`
+  inserts a component and passes the children as *its* scoped `{{CONTENT}}` (empty **+ a render
+  warning** if the component expects `{{CONTENT}}` but none is given); `<Name/>` self-closing for no
+  children; `{{PARAMETER}}` stays for plain var substitution. This makes `{{CONTENT}}` a **per-component
+  slot** instead of a global — today it's a `pageVars` entry, so every component receives it and the
+  layout re-scans it (the root of the commented-`{{COMPONENT}}` regression fixed in v0.6.1) — and it
+  unlocks **component composition** (a component wrapping arbitrary children). **Open questions:**
+  telling component tags from real HTML (capitalized names? a registry lookup?), how parameters arrive
+  (tag attributes vs the `components: []` vars), matching nested/self-closing tags, and a dual-syntax
+  migration for one release. It's a real jump from string-templating to a small template **parser**, so
+  it's worth it once a site actually needs children-composition. Cheaper interim: a **scope-`{{CONTENT}}`**
+  tweak (stop propagating `CONTENT`/asset vars into nested components) captures the "CONTENT shouldn't be
+  global" part with no new syntax.
+
 ### Documentation & housekeeping
 - **End-user documentation** — a task-oriented guide for people *building sites* with the engine (not
   engine internals): the `ssg` commands (`build`/`test`/`add`/`init`), `config.json`, pages + the data
