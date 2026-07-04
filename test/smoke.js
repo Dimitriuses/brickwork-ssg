@@ -802,25 +802,26 @@ try {
 }
 
 // `layout` accepts { name, vars } (same shape as a components entry) — layout params (e.g. header_theme)
-// group under it; a string `layout` + top-level `header_theme` remain a deprecated fallback. title
-// stays page-level.
+// group under it, and the build just forwards them: header_theme is a layout var the _layout build
+// script reads (build.js does NOT process it). A bare top-level `header_theme` is no longer honoured.
+// title stays page-level.
 const lvtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwlv-'));
 const lvtmpArg = lvtmp.replace(/\\/g, '/');
 try {
   const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(lvtmp, p)), { recursive: true }); fs.writeFileSync(path.join(lvtmp, p), c); };
   mk('config.json', JSON.stringify({ site: { name: 'LV' }, nav: [] }));
   mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body data-header-mode="{{HEADER_MODE}}">{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
-  mk('components/_layout/_layout.build.js', 'module.exports = { build(vars, loadComponent, replaceVariables) { vars.HEADER_MODE = vars.HEADER_THEME || "light"; return replaceVariables(loadComponent("_layout"), vars); } };');
+  mk('components/_layout/_layout.build.js', 'module.exports = { build(vars, loadComponent, replaceVariables) { vars.HEADER_MODE = vars.header_theme || "light"; return replaceVariables(loadComponent("_layout"), vars); } };');
   mk('pages/objform/objform.json', JSON.stringify({ page: 'objform', title: 'Obj', layout: { name: '_layout', vars: { header_theme: 'dark' } }, components: [] }));
   mk('pages/objform/objform.html', '<main>obj</main>');
-  mk('pages/oldform/oldform.json', JSON.stringify({ page: 'oldform', layout: '_layout', header_theme: 'dark', components: [] }));
-  mk('pages/oldform/oldform.html', '<main>old</main>');
+  mk('pages/topform/topform.json', JSON.stringify({ page: 'topform', layout: '_layout', header_theme: 'dark', components: [] }));
+  mk('pages/topform/topform.html', '<main>top</main>');
   fs.mkdirSync(path.join(lvtmp, 'assets', 'images'), { recursive: true });
   execSync(`node cli.js build --site "${lvtmpArg}"`, { cwd: root, stdio: 'pipe' });
   const obj = fs.readFileSync(path.join(lvtmp, 'build', 'objform.html'), 'utf8');
-  const old = fs.readFileSync(path.join(lvtmp, 'build', 'oldform.html'), 'utf8');
-  check('layout: { name, vars } groups layout params; string + top-level header_theme still works',
-    /data-header-mode="dark"/.test(obj) && /<title>Obj/.test(obj) && /data-header-mode="dark"/.test(old));
+  const top = fs.readFileSync(path.join(lvtmp, 'build', 'topform.html'), 'utf8');
+  check('header_theme in layout.vars → HEADER_MODE (build forwards, _layout derives); bare top-level header_theme not honoured',
+    /data-header-mode="dark"/.test(obj) && /<title>Obj/.test(obj) && /data-header-mode="light"/.test(top));
 } finally {
   try { fs.rmSync(lvtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }

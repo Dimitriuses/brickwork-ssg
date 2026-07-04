@@ -10,10 +10,10 @@ Recent engine work made `_layout` a **first-class component**. Three changes lan
    `_layout.html` places `{{COMPONENT:header}}` / `{{COMPONENT:footer}}` and a new `_layout.json`
    declares `"dependencies": ["header","footer"]`. `buildPage` no longer builds header/footer or
    injects `{{HEADER}}`/`{{FOOTER}}` vars. **⚠️ Requires a site change if you override `_layout.html`.**
-3. **The header mode moved into the layout** (`fix/header-footer-deps`) — a new engine
-   `_layout.build.js` derives `HEADER_MODE` (default `light`) from the raw `HEADER_THEME` `buildPage`
-   now passes, and sets it on `vars` so the body attribute *and* the nested `{{COMPONENT:header}}` fill
-   from it. *No site change unless you override `_layout.build.js`.*
+3. **The header mode moved into the layout** — a new engine `_layout.build.js` derives `HEADER_MODE`
+   (default `light`) from the page's `header_theme` **layout var** (under `layout.vars`, forwarded by
+   the build — the build itself does not process it), and sets it on `vars` so the body attribute *and*
+   the nested `{{COMPONENT:header}}` fill from it. *No site change unless you override `_layout.build.js`.*
 
 **Who must migrate:** any site that ships its own `components/_layout/_layout.html`. (Both first-party
 sites do.) A site that inherits the engine layout is already correct.
@@ -42,19 +42,21 @@ that behaviour.)
 
 ## Step 2 — if you override `_layout.build.js` (uncommon)
 
-If your site ships its own `components/_layout/_layout.build.js`, derive the mode from the raw theme
-the engine now passes, and set it on `vars` so the nested header sees it:
+If your site ships its own `components/_layout/_layout.build.js`, derive the mode from the page's
+`header_theme` **layout var** (declared under `layout.vars` and forwarded verbatim by the build), and
+set it on `vars` so the nested header sees it:
 
 ```js
 function build(vars, loadComponent, replaceVariables) {
-  vars.HEADER_MODE = vars.HEADER_THEME || 'light';   // was computed in buildPage; now the layout's job
+  vars.HEADER_MODE = vars.header_theme || 'light';   // layout owns the derivation; the build doesn't
   return replaceVariables(loadComponent('_layout'), vars);
 }
 module.exports = { build };
 ```
 
-The old build-wide `HEADER_MODE` global is gone; `buildPage` passes `HEADER_THEME` (the page's raw
-`header_theme`, possibly unset). If you don't override the build script, ignore this step.
+The build does **not** process `header_theme` — it's a layout var (`layout: { name, vars: { header_theme } }`),
+forwarded to the layout like any other. (A bare top-level `header_theme` is no longer honoured; put it in
+`layout.vars`.) If you don't override the build script, ignore this step.
 
 ## Step 3 — verify with `ssg test`, not just `ssg build`
 

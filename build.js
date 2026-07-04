@@ -346,15 +346,13 @@ function buildPage(pageConfig, pageName) {
   // Replace layout variables
   const pageVars = {
     ...flatConfig,   // Spread flatConfig FIRST so it can be overridden
-    ...layoutVars,   // the layout's own vars (grouped under `layout` in the page config)
+    ...layoutVars,   // the layout's own vars (grouped under `layout` in the page config) — e.g.
+                     // `header_theme`, which the _layout component reads + turns into HEADER_MODE.
+                     // The build stays out of layout-specific processing; it just forwards the vars.
     PAGE_TITLE: pageData.title || flatConfig.SITE_NAME,
     PAGE_DESCRIPTION: pageData.description || flatConfig.SITE_DESCRIPTION,
     SITE_NAME: flatConfig.SITE_NAME,
     CONTENT: raw(mainContent),
-    // The raw header_theme; the _layout component derives HEADER_MODE from it (defaulting to 'light').
-    // It now lives in `layout.vars` (grouped with the layout); a top-level `header_theme` is still
-    // honoured as a deprecated fallback.
-    HEADER_THEME: layoutVars.header_theme !== undefined ? layoutVars.header_theme : pageData.header_theme,
     // The collected component CSS <link> tags (in <head>) and JS <script> tags (end of <body>).
     // {{CSS_LINKS}}/{{JS_SCRIPTS}} are the self-describing names; {{HEAD_EXTRA}}/{{BODY_EXTRA}} are
     // kept as **deprecated aliases** (same value) so existing site layouts keep working — to be
@@ -517,8 +515,7 @@ function expandTemplatePage(templateFile, templateConfig) {
       page: pageName,
       title: descriptor.title,
       description: descriptor.description,
-      layout: templateConfig.layout || '_layout',
-      header_theme: templateConfig.header_theme,
+      layout: templateConfig.layout || '_layout',   // carries the template's layout vars (header_theme, …)
       components: resolveComponentVars(templateConfig.components || [], descriptor.item),
       content: replaceVariables(templateHtml, descriptor.vars || {}),
       assetsFrom

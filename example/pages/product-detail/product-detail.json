@@ -9,10 +9,22 @@
       "PRODUCT_DETAILS": "$data.details"
     }
   },
-  "layout": "_layout",
-  "header_theme": "dark",
+  "layout": {
+    "name": "_layout",
+    "vars": {
+      "header_theme": "dark"
+    }
+  },
   "components": [
-    { "name": "carousel", "vars": { "IMAGES": "$images", "ALT": "$data.name" } },
-    { "name": "contactIcons" }
+    {
+      "name": "carousel",
+      "vars": {
+        "IMAGES": "$images",
+        "ALT": "$data.name"
+      }
+    },
+    {
+      "name": "contactIcons"
+    }
   ]
 }

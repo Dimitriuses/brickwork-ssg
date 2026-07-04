@@ -1,1 +1,11 @@
-{ "page": "about", "title": "About", "header_theme": "dark", "layout": "_layout", "components": [] }
+{
+  "page": "about",
+  "title": "About",
+  "layout": {
+    "name": "_layout",
+    "vars": {
+      "header_theme": "dark"
+    }
+  },
+  "components": []
+}
