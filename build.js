@@ -246,7 +246,12 @@ function buildPage(pageConfig, pageName) {
   // The layout is a first-class component: it's built via buildComponent below (so it can carry a
   // <name>.build.js / subComponents / {{COMPONENT}} like any other), with CONTENT + the chrome
   // (HEADER/FOOTER/PAGE_TITLE/…) passed as its component vars.
-  const layoutName = pageData.layout || '_layout';
+  // `layout` may be a string (name) or a { name, vars } object — the same shape as a `components`
+  // entry — so layout params (e.g. header_theme) group under it instead of scattering at the top level.
+  const layoutConfig = pageData.layout;
+  const layoutName = (layoutConfig && typeof layoutConfig === 'object' ? layoutConfig.name : layoutConfig) || '_layout';
+  const layoutVars = (layoutConfig && typeof layoutConfig === 'object' && layoutConfig.vars && typeof layoutConfig.vars === 'object')
+    ? layoutConfig.vars : {};
 
   // Build components
   let componentsHtml = '';
@@ -340,15 +345,16 @@ function buildPage(pageConfig, pageName) {
   
   // Replace layout variables
   const pageVars = {
-    ...flatConfig,  // Spread flatConfig FIRST so it can be overridden
+    ...flatConfig,   // Spread flatConfig FIRST so it can be overridden
+    ...layoutVars,   // the layout's own vars (grouped under `layout` in the page config)
     PAGE_TITLE: pageData.title || flatConfig.SITE_NAME,
     PAGE_DESCRIPTION: pageData.description || flatConfig.SITE_DESCRIPTION,
     SITE_NAME: flatConfig.SITE_NAME,
     CONTENT: raw(mainContent),
-    // The page's raw header_theme; the _layout component derives HEADER_MODE from it (defaulting
-    // to 'light') and passes that to the body attribute + the header — so the mode lives with the
-    // layout, not as build-wide global processing here.
-    HEADER_THEME: pageData.header_theme,
+    // The raw header_theme; the _layout component derives HEADER_MODE from it (defaulting to 'light').
+    // It now lives in `layout.vars` (grouped with the layout); a top-level `header_theme` is still
+    // honoured as a deprecated fallback.
+    HEADER_THEME: layoutVars.header_theme !== undefined ? layoutVars.header_theme : pageData.header_theme,
     // The collected component CSS <link> tags (in <head>) and JS <script> tags (end of <body>).
     // {{CSS_LINKS}}/{{JS_SCRIPTS}} are the self-describing names; {{HEAD_EXTRA}}/{{BODY_EXTRA}} are
     // kept as **deprecated aliases** (same value) so existing site layouts keep working — to be

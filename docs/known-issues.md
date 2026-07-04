@@ -4,6 +4,28 @@ A running log of bugs and structural inconsistencies, so they aren't forgotten. 
 entries at the top; keep each short — symptom, why it matters, a sketch of the fix, status. Resolved
 entries stay as a record, marked ✅ Fixed.
 
+## ✅ Page config flat-mixes page identity, layout params, and content *(fixed)*
+
+**Symptom.** A page's `<name>.json` puts everything at the top level: `page` (the output name /
+identity), `title` + `description` (page metadata), `header_theme` (a layout-appearance param), `layout`
+(the wrapper name), and `components` (the content). So `header_theme` — which only configures the layout
+— sits next to `page`, ungrouped; the three concerns (identity/metadata, layout + its params, content)
+are one flat bag.
+
+**Why it matters.** Structurally muddy — a reader can't tell which fields configure the layout vs
+identify the page. It's also inconsistent: content `components` are `{ name, vars }`, but the layout
+(also a component) is a bare `layout: "_layout"` string with its params scattered as sibling keys.
+
+**Fix.** ✅ Done (`feat/layout-vars`). `buildPage` now accepts `layout` as a **string** *or* a
+**`{ name, vars }`** object (same shape as a `components` entry), so layout params group under it:
+`"layout": { "name": "_layout", "vars": { "header_theme": "dark" } }`. `title`/`description` stay
+page-level (page metadata / future SEO — still resolved to `PAGE_TITLE`/`PAGE_DESCRIPTION`).
+Backward-compatible: a string `layout` still works, and a top-level `header_theme` is honoured as a
+deprecated fallback (`layout.vars.header_theme ?? pageData.header_theme`). A smoke check covers both
+forms. **Follow-up:** migrate the sites' pages to the object form, then drop the top-level fallback.
+
+**Status.** ✅ Fixed (schema supports the grouped form; sites migrate next).
+
 ## ✅ `{{COMPONENT:x}}` in page CONTENT is expanded by the layout pass (commented / undeclared too) — v0.6.0 regression *(fixed)*
 
 **Symptom.** A `{{COMPONENT:name}}` that appears in a page's **content** but isn't resolved during the

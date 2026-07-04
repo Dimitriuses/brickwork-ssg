@@ -69,7 +69,7 @@ A component is a folder. Recognized files:
 
 ### Pages (`pages/<name>/<name>.json`)
 
-Fields: `page` (output filename), `title`, `description`, `header_theme` (`"dark"`/`"light"` → `<body data-header-mode>`), `layout` (default `_layout`), and `components: [{ name, vars }]`.
+Fields: `page` (output filename), `title`/`description` (page metadata, stay page-level), `layout` — a name **string** *or* a **`{ name, vars }`** object (default `_layout`), the same shape as a components entry, whose `vars` hold layout params like `header_theme` (`"dark"`/`"light"` → `<body data-header-mode>`; a top-level `header_theme` is a deprecated fallback) — and `components: [{ name, vars }]`.
 
 Content body resolution order: explicit `content_file` → inline `content` string → auto-load `<page>.html` from the same folder.
 
