@@ -7,15 +7,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run build          # Build the site (runs `node cli.js build`) into build/
 npm test               # Build + smoke test (asserts output invariants; non-zero exit on any page failure)
-npm run admin          # Install admin deps + start the admin panel on http://localhost:3000
-npm run admin:start    # Start the admin panel without reinstalling deps
+npm run admin          # Launch the admin (site-owned copy via dirs.admin, else the bundled default)
 ```
+
+The admin is **adopted per-site** with `ssg add admin` (copies `catalog/admin/` into the site + installs
+its deps there); `ssg admin` then runs that copy. The engine keeps a bundled default in `catalog/admin/`
+as a fallback (see the Admin panel section).
 
 The engine is invoked through a small CLI, [cli.js](cli.js): `ssg build|admin|test [--site <dir>]`. A **site** is a directory containing `config.json`, `pages/`, `assets/`, `shared/`; the default site is the current directory, so `node cli.js build` ≡ `node build.js`. The npm scripts operate on this repo's own site.
 
 There is no linter or watch mode. After changing anything under `components/`, `generators/`, `pages/`, `assets/`, `config.json`, or `shared/`, re-run `npm run build` (or `npm test`) and open `build/index.html` (or serve `build/` with `python -m http.server 8000`).
 
-The builder has **zero runtime dependencies** — `node build.js` runs on a clean checkout. Only the admin panel needs Express + Multer, installed into `shared/admin/node_modules/` by `npm run admin:install`.
+The builder has **zero runtime dependencies** — `node build.js` runs on a clean checkout. Only the admin panel needs Express + Multer; `ssg add admin` installs them into the site's own admin copy (`<dirs.admin>/node_modules/`).
 
 > **v0.2 — site extensibility:** a site can author its own components, generators, and tests — site-first per-file resolution (+ `components/registry.json`), declarative sub-components, data-only generators driven by **template pages** and resolved by name (`generators/registry.json`), build-script helpers, and `ssg test`. See [docs/extensibility.md](docs/extensibility.md).
 >
@@ -28,8 +31,8 @@ A custom static-site generator. The build is driven by [build.js](build.js) (ent
 ### Engine vs. site roots
 
 `build.js` resolves two roots so one engine can build many sites:
-- **`ENGINE_ROOT`** (`__dirname`) — shared code: `build.js`, `generators/`, `lib/`, `shared/admin/`, and the **`catalog/`** of deployable materials (see slim-core note below).
-- **`SITE_ROOT`** (`process.cwd()`) — per-site: `config.json`, `pages/`, `assets/`, `shared/` data, `components/` (the materials the site owns), and the `build/` output. **the whole workspace is relocatable** via a `config.json` `dirs` block (`lib/dirs.js`): `pages`/`components`/`generators`/`assets` + the `output`/`test`/`log` folders (e.g. source under `src/`, assets under `shared/assets`) — defaults to this layout; `dirs.log` supersedes `log.file.dir`; `config.json` + `shared/database.json` stay at the root.
+- **`ENGINE_ROOT`** (`__dirname`) — shared code: `build.js`, `generators/`, `lib/`, and the **`catalog/`** of deployable materials — components **and** the bundled admin (`catalog/admin/`) (see slim-core note below).
+- **`SITE_ROOT`** (`process.cwd()`) — per-site: `config.json`, `pages/`, `assets/`, `shared/` data, `components/` (the materials the site owns), and the `build/` output. **the whole workspace is relocatable** via a `config.json` `dirs` block (`lib/dirs.js`): `pages`/`components`/`generators`/`assets` + the `output`/`test`/`log` folders, plus `database` (the collections DB **file**, default `shared/database.json`) and `admin` (the site-owned admin folder) — defaults to this layout; `dirs.log` supersedes `log.file.dir`; `config.json` stays at the root.
 
 Components resolve **site-first, then engine**, **per file** (`resolveComponentFile`): a site can override just `header/header.html` and keep the engine's `header.build.js`, or ship a whole new component. A site `components/registry.json` may map a component name to a folder. The `ssg` CLI chdir's into the requested `--site` so `SITE_ROOT` = cwd.
 
@@ -85,6 +88,8 @@ Generation is **declared by template pages**, not auto-run. A **template page** 
 
 **Products pagination & image loading.** The `products` component takes a `PRODUCTS_PER_PAGE` var (in a page's component `vars`): a positive integer paginates the grid, `0`/unset/invalid disables it. Pagination is **client-side** — every card is rendered at build time; [components/products/script.js](components/products/script.js) reads `data-products-per-page` and slices `.products-grid` into pages with Bootstrap pager controls. All product/detail `<img>` tags carry `loading="lazy" decoding="async"` so off-screen/paginated-away images don't download until shown. The HTML text still scales linearly with product count; per-page HTML splitting is a not-yet-built option.
 
-### Admin panel (`shared/admin/`)
+### Admin panel (`catalog/admin/`)
 
-[shared/admin/server.js](shared/admin/server.js) is an Express REST API (port 3000) for CRUD on products and image uploads (Multer), launched via `ssg admin [--site <dir>]`. It manages the site at the **working directory** (`ROOT_DIR = process.cwd()`) — reading `shared/database.json` to resolve collection sources and **writing directly into the site's `shared/<source>/`** — while serving its own UI from the engine (`__dirname`). Untrusted `:id`/`:filename`/upload-name params are validated against path traversal. It does not touch `build/` or run the builder; run `npm run build` afterward to regenerate the site.
+The admin is a **data-model-driven** Express REST API + a self-contained UI, adopted into a site with **`ssg add admin`** (copies `catalog/admin/` → `dirs.admin` (default `shared/admin`), seeds `dirs.admin` + a minimal `admin` block in `config.json`, and `npm install`s its deps there; `--folder`/`--force`/`--no-install`). `ssg admin` resolves **site-first** — it runs the site's own copy at `dirs.admin`, and if none is installed offers the engine's bundled default (`catalog/admin/`). The adopted copy is **self-contained** (its own `server.js`, `lib/model.js`, `public/` incl. the isomorphic `fieldTypes.js`, and `node_modules`) — it needs nothing from the engine.
+
+It manages the site at the **working directory** (`ROOT_DIR = process.cwd()`), reading the collections DB via **`dirs.database`** (the same file the build reads). For every **enabled** collection it walks the `data_model` and exposes a generic CRUD API — no per-collection code: `object` parts are read/written as JSON (validated against an optional **`schema`** via the field-type registry, [catalog/admin/public/fieldTypes.js](catalog/admin/public/fieldTypes.js)), `paths`/`file_path` parts are file managers. The UI ([catalog/admin/public/](catalog/admin/public/)) generates forms + file managers from `GET /api/collections`. Settings come from `<dirs.admin>/admin.json` (else `config.json.admin`): **`localhost_only`** binds `127.0.0.1` **by default**, plus `port` and per-part upload limits (`max_count`/`max_size_mb`/`accept`) + `hide`; `admin.collections` names are validated against each `data_model` at startup (exit 1 on a typo). Collection visibility is the DB's `enabled` flag (drops it from build **and** admin). Untrusted `:id`/`:filename`/part params are validated against path traversal. It writes directly into the site's collection `source/` and does **not** touch `build/`; run `npm run build` afterward. See [docs/admin-extension-plan.md](docs/admin-extension-plan.md).

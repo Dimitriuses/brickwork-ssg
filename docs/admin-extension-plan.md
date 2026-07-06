@@ -1,6 +1,7 @@
 # Admin panel extension — implementation plan
 
-> **Status: finalized — ready to build.** Expands the **Admin panel extension** item in
+> **Status: shipped** (`feat/admin-extension`; Phase 1 on `main`). Engine work + docs done — remaining:
+> adopt on the sites (demo end-to-end; private site adds `schema`s). Expands the **Admin panel extension** item in
 > [ROADMAP.md](../ROADMAP.md). The admin becomes a **data-management surface derived from each
 > collection's `data_model`**, **owned by the site** (adopted via `ssg add admin`), with `database.json`'s
 > location made configurable and its own settings/security config. All questions resolved (see
@@ -240,12 +241,12 @@ No open questions. `npm test` green after each commit; every commit ships a smok
 independently shippable** (a clean build-side win); **Phase 3 is the bulk**. Admin deps (`express`,
 `multer`) are opt-in — the engine's *build* stays zero-dependency.
 
-### Phase 1 — `dirs.database` *(foundation; additive)*
+### ✅ Phase 1 — `dirs.database` *(foundation; additive)* — `df22abf` (on `main`)
 - **P1.** `lib/dirs.js`: add `database` (default `"shared/database.json"`) to `DEFAULT_DIRS`; `build.js`
   reads `siteDirs(SITE_ROOT).database` for `DATABASE_FILE`. Smoke: a site with `dirs.database` at a custom
   path builds. *(No site change; sites can set it whenever.)*
 
-### Phase 2 — adopt the admin (`ssg add admin`)
+### ✅ Phase 2 — adopt the admin (`ssg add admin`) — `e7999aa` (P2.1), `c290ef9` (P2.2)
 - **P2.1 — relocate + resolve.** `git mv engine/shared/admin/` → **`catalog/admin/`** (flag it
   non-removable via a `catalog/admin/README`); `cli.js` `ssg admin` resolves **site-first via `dirs.admin`**,
   else `catalog/admin`, and on a **missing** `dirs.admin` folder warns + prompts `(y/n)` (non-TTY → **no**)
@@ -257,7 +258,7 @@ independently shippable** (a clean build-side win); **Phase 3 is the bulk**. Adm
   folder (`--yes`/`--no`/`--force`), **repoint `dirs.admin`** on a new folder. Smoke: adopt into a temp
   site (copy + config merge + dispatch, offline-safe; the install path verified out of band).
 
-### Phase 3 — data-model-driven CRUD *(the core — split)*
+### ✅ Phase 3 — data-model-driven CRUD *(the core — split)* — `693308c` (P3.1), `fae3a0d` (P3.2), `2a36e6a` (P3.3)
 - **P3.1 — backend + config + security.** Rework `server.js` to be data-model-driven: read `database.json`
   (via `dirs.database`) → `enabled` collections → walk `data_model`; a generic API (list collections /
   items / read+write an item's parts). Per part: `object` read/write, `paths`/`file_path` upload/list/
@@ -272,7 +273,7 @@ independently shippable** (a clean build-side win); **Phase 3 is the bulk**. Adm
   `object`; file manager for `paths`/`file_path`) honouring `hide` + the upload limits. Manual/e2e check
   against a fixture site.
 
-### Phase 4 — docs & wrap-up
+### ✅ Phase 4 — docs & wrap-up *(this commit)*
 - **P4.** README/CLAUDE (`ssg add admin`, `dirs.database`, the `admin` block + localhost default),
   ROADMAP item marked done, this plan marked shipped. (A task-oriented admin guide rides with the
   end-user-docs roadmap task.)

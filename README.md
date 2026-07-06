@@ -23,16 +23,19 @@ my-site/
 ```
 
 The whole workspace is **relocatable** via a `config.json` `dirs` block — `pages`, `components`,
-`generators`, `assets`, and the build `output`, `test`, and `log` folders. Each defaults to the layout
-above, so it's optional. For example, to keep source under `src/` and assets alongside your data:
+`generators`, `assets`, the build `output`, `test`, and `log` folders, the collections `database` file,
+and the `admin` folder. Each defaults to the layout above, so it's optional. For example, to keep source
+under `src/` and assets alongside your data:
 
 ```json
 { "dirs": { "pages": "src/pages", "components": "src/components", "generators": "src/generators",
-            "assets": "shared/assets", "output": "build", "test": "test", "log": "log" } }
+            "assets": "shared/assets", "output": "build", "test": "test", "log": "log",
+            "database": "shared/database.json", "admin": "shared/admin" } }
 ```
 
-`dirs.log` is the single source for the log file-sink folder (it supersedes `log.file.dir`).
-`config.json` and `shared/database.json` stay at the site root.
+`dirs.log` is the single source for the log file-sink folder (it supersedes `log.file.dir`), and
+`dirs.database` (a **file**, default `shared/database.json`) is where the build and the admin read the
+collections DB. `config.json` itself stays at the site root.
 
 ## Use it in a site (git submodule)
 
@@ -46,11 +49,12 @@ node engine/cli.js init [dir]            # scaffold a blank buildable site into 
 node engine/cli.js init [dir] --template demo   # or scaffold from the demo repo (its files, no history)
 node engine/cli.js build                 # build the site (cwd) into build/
 node engine/cli.js build --site path     # or build any site directory
-node engine/cli.js admin                 # product admin on http://localhost:3000
+node engine/cli.js admin                 # launch the site's admin (data management) on http://localhost:3000
 node engine/cli.js test                  # build + engine checks + site tests
 node engine/cli.js add <kind> <name>     # scaffold new material: page|component|generator|builder|test
 node engine/cli.js add material <name>   # adopt an engine material into the site (--force, --dry-run)
 node engine/cli.js add material --all-used   # adopt every material the site uses but inherits
+node engine/cli.js add admin             # adopt the (data-model-driven) admin panel into the site
 ```
 
 **Output** flows through one module: colour-coded (green/amber/red), with `--quiet`/`--verbose`, a
@@ -69,6 +73,7 @@ site currently inherits; an edited file is reported as **drift**, not overwritte
 | `builder` | `<name>.build.js` inside an **existing** component's folder (errors if that component doesn't exist) |
 | `test` | `test/<name>.test.js` — a runnable site-test stub, discovered + run by `ssg test` |
 | `material` | copies an engine material into the site — `--all-used`, `--force`, `--dry-run` |
+| `admin` | adopts the admin panel into the site (`--folder`, `--force`, `--no-install`) — sets `dirs.admin` + seeds an `admin` block, installs its deps |
 
 Every kind refuses to overwrite an existing file unless `--force`, and never commits — you review the
 diff. Starter-stub content lives in one place (`lib/scaffold.js`'s `STUBS` map).
@@ -85,8 +90,9 @@ Add scripts to your site's `package.json`:
 }
 ```
 
-The build needs **no dependencies**. The admin panel needs the engine's deps —
-install them once into the submodule: `npm --prefix engine install`.
+The build needs **no dependencies**. The admin panel (Express + Multer) is opt-in: `ssg add admin`
+copies it into your site and installs its deps *there* (`--no-install` to skip). `ssg admin` then runs
+your site's copy; if none is installed it offers to launch the engine's bundled default.
 
 **Pin & update the engine** by checking out a release tag inside the submodule:
 
@@ -112,6 +118,12 @@ Clone a site with its engine in one step: `git clone --recurse-submodules <site-
   per-collection `data_model` (`{ match, type, copy, required }` per part) both surfaces each
   item to generators (`ctx.collection.items`) and controls which files reach `build/` —
   `copy` defaults **false**, so raw `product.json` stays out of the output (leak control).
+- **Admin panel** — an optional, **data-model-driven** management UI, adopted with `ssg add admin` (the
+  site owns + can edit its copy). It reads each enabled collection's `data_model` and generates CRUD per
+  part: object parts become forms (from an optional `schema`, via an extensible field-type registry),
+  `paths`/`file_path` parts become file managers. Settings live in a `config.json` `admin` block (or the
+  admin's own `admin.json`): it binds **localhost-only by default**, and per-part upload limits
+  (`max_count`/`max_size_mb`/`accept`) + `hide` are honoured. See [docs/admin-extension-plan.md](docs/admin-extension-plan.md).
 - **Safe templating** — values are HTML-escaped by default (`raw()` opt-out),
   ids are slugified, and the build exits non-zero on any page failure.
 

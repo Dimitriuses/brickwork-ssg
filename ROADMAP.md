@@ -151,14 +151,17 @@ it needs a window-based generation model (below) and is a large task in its own 
 - **npm-distributed third-party plugins/themes + a material registry** — third-party/shared
   distribution (e.g. a community "materials" project people add to), once the deploy model
   is proven.
-- **Admin panel extension** *(own track — substantial; **planned, ready to build**)* — today `ssg admin` is a single
-  Express + Multer server (`shared/admin/server.js`) **hardcoded to the products/images CRUD**. Make it
-  **per-site extensible**: drive which collections/fields it edits from each collection's `data_model`
-  instead of hardcoding, let a site **own + customize** it via **`ssg add admin`** (adopt/copy into
-  `--folder` › `dirs.admin` › `<data-root>/admin/`), and make **`database.json`'s location
-  configurable** (it's hardcoded in `build.js` *and* the admin today). Drafted with notes, caveats, and
-  open questions — chiefly the `object`-part **field schema** (the model surfaces the parsed object but
-  not its fields) — in **[docs/admin-extension-plan.md](docs/admin-extension-plan.md)**.
+- **✅ Done — Admin panel extension** — the admin is now **data-model-driven** and **site-owned**. It was a
+  single Express + Multer server hardcoded to products/images CRUD; now **`ssg add admin`** adopts it into a
+  site (copy → `--folder` › `dirs.admin` › `shared/admin`, seeds `dirs.admin` + a minimal `admin` block,
+  installs its deps), **`ssg admin`** runs the site's copy (bundled default in `catalog/admin/` as a
+  fallback), and the server drives generic CRUD from each **enabled** collection's `data_model` — `object`
+  parts as schema-driven forms (an extensible **field-type registry**, `fieldTypes.js`) validated
+  server-side, `paths`/`file_path` parts as file managers with per-part upload limits + `hide`.
+  `database.json`'s location is now configurable (**`dirs.database`**, read by both the build and the
+  admin). Settings live in an `admin` block / `admin.json` (binds **localhost-only by default**). Shipped
+  in `feat/admin-extension` (Phase 1 `dirs.database` on `main`; Phases 2–4 on the branch). See
+  [docs/admin-extension-plan.md](docs/admin-extension-plan.md).
 - **✅ Done (v0.5.0–v0.5.1) — Build/test output overhaul (terminal UX)**: a zero-dependency output
   module (`lib/log.js` + `lib/colors.js`) all build/test output flows through — traffic-light colour,
   verbosity levels (`--quiet`/`--verbose`), a `config.json` `log` block + `--log key=value` flags, an
@@ -176,8 +179,9 @@ it needs a window-based generation model (below) and is a large task in its own 
   sink (`dirs.log` supersedes `log.file.dir`), so e.g. `"dirs": { "pages": "src/pages", "components":
   "src/components", "generators": "src/generators", "assets": "shared/assets" }` keeps source under
   `src/` and assets under `shared/assets`. Supersedes the never-read `build.*_dir` config (dead code).
-  `config.json` + `shared/database.json` stay site-root-relative. Both sites were restructured to the
-  `src/`/`shared` layout (`feat/configurable-dirs` shipped the core; `output`/`test`/`log` added after).
+  `config.json` stays site-root-relative (`dirs.database` later made the collections DB relocatable too).
+  Both sites were restructured to the `src/`/`shared` layout (`feat/configurable-dirs` shipped the core;
+  `output`/`test`/`log` added after).
 - **Selectable pagination modes** — **single-page** (client-side, all cards rendered;
   today's behavior) is available now. **Multi-page** (build-time HTML splitting, so the HTML
   stops scaling linearly with item count) is **deferred**: it needs the *window-based
