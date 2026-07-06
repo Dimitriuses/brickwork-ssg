@@ -11,6 +11,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const model = require('./lib/model');
+const fieldTypes = require('./fieldTypes');
 
 const app = express();
 
@@ -90,6 +91,9 @@ function itemTitle(parts, values, id) {
   }
   return id;
 }
+// Validate an object-part value against its `schema` (a no-op when the part declares none). Returns an
+// array of human messages ([] when valid).
+function objectPartErrors(part, obj) { return part.schema ? fieldTypes.validateObject(obj, part.schema) : []; }
 
 // --- Startup validation: admin.collections must name real collections + parts ------------------------
 // A typo/rename in admin.collections (a collection or part that isn't in the DB's data_model) is a
@@ -179,6 +183,8 @@ app.post('/api/collections/:collection/items', (req, res) => {
     const seed = (req.body && req.body.parts) || {};
     for (const p of model.modelParts(c)) {
       if (p.type === 'object' && seed[p.name] !== undefined) {
+        const errs = objectPartErrors(p, seed[p.name]);
+        if (errs.length) { fs.rmSync(itemDir, { recursive: true, force: true }); return res.status(400).json({ error: `Validation failed for "${p.name}"`, errors: errs }); }
         const fn = model.objectFileName(itemDir, p);
         if (fn) fs.writeFileSync(path.join(itemDir, fn), JSON.stringify(seed[p.name], null, 2));
       }
@@ -195,6 +201,8 @@ app.put('/api/collections/:collection/items/:id/parts/:part', (req, res) => {
     if (part.type !== 'object') return res.status(400).json({ error: `Part "${part.name}" is not an object part` });
     const itemDir = itemDirOf(c, req.params.id);
     if (!fs.existsSync(itemDir)) return res.status(404).json({ error: 'Item not found' });
+    const errs = objectPartErrors(part, req.body || {});
+    if (errs.length) return res.status(400).json({ error: 'Validation failed', errors: errs });
     const fn = model.objectFileName(itemDir, part);
     if (!fn) return res.status(400).json({ error: `Cannot determine a filename for object part "${part.name}" (match "${part.match}" is a glob)` });
     fs.writeFileSync(path.join(itemDir, fn), JSON.stringify(req.body || {}, null, 2));

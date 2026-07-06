@@ -960,4 +960,31 @@ try {
   try { fs.rmSync(amtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Phase 3.2 (field-type registry): fieldTypes drives object-part forms + server-side schema validation.
+// Isomorphic (require in Node / <script> in the browser); smoke unit-tests the pure registry.
+const FT = require('../catalog/admin/fieldTypes');
+check('fieldTypes: registry has the base types; unknown -> string',
+  ['string', 'text', 'number', 'boolean', 'select', 'datetime'].every(t => FT.types[t]) &&
+  FT.typeOf({ type: 'nope' }) === FT.types.string);
+check('fieldTypes: validate (required, number, select)',
+  FT.types.string.validate('', { required: true }) === 'is required' &&
+  FT.types.string.validate('x', { required: true }) === null &&
+  FT.types.number.validate('abc', {}) === 'must be a number' &&
+  FT.types.number.validate('3.5', {}) === null &&
+  FT.types.select.validate('z', { options: ['a', 'b'] }) === 'is not one of the allowed choices' &&
+  FT.types.select.validate('a', { options: ['a', 'b'] }) === null);
+const ftSchema = {
+  name:  { type: 'string', label: 'Name', required: true },
+  price: { type: 'number', label: 'Price' },
+  size:  { type: 'select', label: 'Size', options: [{ value: 's', label: 'Small' }, { value: 'l', label: 'Large' }] }
+};
+check('fieldTypes: validateObject aggregates messages; valid -> []',
+  FT.validateObject({ name: '', price: 'x', size: 'xl' }, ftSchema).length === 3 &&
+  FT.validateObject({ name: 'Widget', price: 9, size: 's' }, ftSchema).length === 0);
+check('fieldTypes: input renders controls (HTML-escaped)',
+  /<input type="text"[^>]*value="A&amp;B"/.test(FT.types.string.input('name', 'A&B', {})) &&
+  /<textarea/.test(FT.types.text.input('d', 'x', {})) &&
+  /<select[^>]*>\s*<option value="s"[^>]*>Small<\/option>/.test(FT.types.select.input('sz', 's', ftSchema.size)) &&
+  /type="checkbox"[^>]* checked/.test(FT.types.boolean.input('b', true, {})));
+
 done();
