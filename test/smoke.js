@@ -826,4 +826,27 @@ try {
   try { fs.rmSync(lvtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Phase 1 (dirs.database): the collections DB path is a configurable `dirs` entry (the one *file* key).
+// A site with `dirs.database: "data/db.json"` and NO shared/database.json still copies its collections —
+// proving the build reads the DB from the configured path, not the hardcoded shared/database.json.
+const dbtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwdb-'));
+const dbtmpArg = dbtmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(dbtmp, p)), { recursive: true }); fs.writeFileSync(path.join(dbtmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'DB' }, nav: [], dirs: { database: 'data/db.json' } }));
+  mk('data/db.json', JSON.stringify({ collections: [{ name: 'widgets', source: 'stuff', destination: 'widgets', enabled: true }] }));
+  mk('stuff/item-1/a.txt', 'hello');
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main>hi</main>');
+  fs.mkdirSync(path.join(dbtmp, 'assets', 'images'), { recursive: true });
+  let dbExit = 0;
+  try { execSync(`node cli.js build --site "${dbtmpArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { dbExit = e.status || 1; process.stderr.write(((e.stdout || '') + '') + ((e.stderr || '') + '')); }
+  check('dirs.database: build reads the collections DB from the configured file path',
+    dbExit === 0 && fs.existsSync(path.join(dbtmp, 'build', 'widgets', 'item-1', 'a.txt')));
+} finally {
+  try { fs.rmSync(dbtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();

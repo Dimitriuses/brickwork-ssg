@@ -18,9 +18,8 @@ const SITE_ROOT = process.cwd();
 const COMPONENTS_DIR = path.join(ENGINE_ROOT, 'components');
 const GENERATORS_DIR = path.join(ENGINE_ROOT, 'generators');
 
-// config.json + shared/ are fixed at the site root (config bootstraps the layout below).
+// config.json is fixed at the site root (it bootstraps the layout below).
 const CONFIG_FILE = path.join(SITE_ROOT, 'config.json');
-const DATABASE_FILE = path.join(SITE_ROOT, 'shared', 'database.json');
 
 // Load site configuration
 const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
@@ -32,6 +31,7 @@ const ASSETS_DIR = DIRS.assets;
 const BUILD_DIR = DIRS.output;
 const SITE_GENERATORS_DIR = DIRS.generators;
 const SITE_COMPONENTS_DIR = DIRS.components;
+const DATABASE_FILE = DIRS.database; // the collections DB (the `database` file entry in `dirs`)
 
 // Load database configuration for collections
 let database = { collections: [] };
