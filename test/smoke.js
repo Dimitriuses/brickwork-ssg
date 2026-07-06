@@ -998,5 +998,7 @@ check('admin UI: self-contained (no CDN) + serves fieldTypes.js and wires both s
   /src="fieldTypes\.js"/.test(idxHtml) && /src="app\.js"/.test(idxHtml));
 check('admin UI: generic (drives /api/collections + FieldTypes, no hardcoded product API)',
   /api\/collections/.test(appJs) && !/api\/products/.test(appJs) && /window\.FieldTypes/.test(appJs));
+check('admin UI: paths parts allow multi-file select (uploadFiles loop)',
+  /input\.multiple\s*=\s*true/.test(appJs) && /async function uploadFiles/.test(appJs));
 
 done();

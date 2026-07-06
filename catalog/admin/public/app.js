@@ -196,22 +196,36 @@ function renderFileManager(p, value, itemId) {
     up.appendChild(el('div', { class: 'muted small' }, `Max ${cfg.max_count} file(s) reached — remove one to add more.`));
   } else {
     const input = el('input', { type: 'file' });
+    if (p.type === 'paths') input.multiple = true; // select several files at once
     if (Array.isArray(cfg.accept) && cfg.accept.length) input.accept = cfg.accept.map(x => '.' + String(x).replace(/^\./, '')).join(',');
-    input.onchange = () => input.files.length && uploadFile(p, itemId, input.files[0]);
+    input.onchange = () => input.files.length && uploadFiles(p, itemId, Array.from(input.files));
     up.appendChild(input);
-    const hint = [p.type === 'file_path' && files.length ? 'replaces the current file' : '', cfg.max_size_mb ? `up to ${cfg.max_size_mb} MB` : '', Array.isArray(cfg.accept) ? cfg.accept.join('/') : ''].filter(Boolean).join(' · ');
+    const remaining = (p.type === 'paths' && cfg.max_count) ? cfg.max_count - files.length : null;
+    const hint = [
+      p.type === 'paths' ? 'select one or more' : (files.length ? 'replaces the current file' : ''),
+      remaining != null ? `${remaining} slot(s) left` : '',
+      cfg.max_size_mb ? `up to ${cfg.max_size_mb} MB each` : '',
+      Array.isArray(cfg.accept) ? cfg.accept.join('/') : ''
+    ].filter(Boolean).join(' · ');
     if (hint) up.appendChild(el('span', { class: 'muted small' }, hint));
   }
   wrap.appendChild(up);
   return wrap;
 }
 
-async function uploadFile(p, itemId, file) {
-  try {
-    const fd = new FormData(); fd.append('file', file);
-    await api('POST', `/api/collections/${enc(state.current)}/items/${enc(itemId)}/parts/${enc(p.name)}/files`, fd, true);
-    toast('Uploaded'); await openEditor(itemId);
-  } catch (e) { toast(errMsg(e), true); }
+// Upload one or more files to a part (sequential; each hit enforces the part's limits server-side).
+// Failures (e.g. a rejected type or hitting max_count) are collected so the rest still go through.
+async function uploadFiles(p, itemId, files) {
+  let ok = 0; const errs = [];
+  for (const file of files) {
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      await api('POST', `/api/collections/${enc(state.current)}/items/${enc(itemId)}/parts/${enc(p.name)}/files`, fd, true);
+      ok++;
+    } catch (e) { errs.push(`${file.name}: ${errMsg(e)}`); }
+  }
+  await openEditor(itemId);
+  toast(errs.length ? `Uploaded ${ok}, ${errs.length} failed — ${errs[0]}` : `Uploaded ${ok} file(s)`, errs.length > 0);
 }
 
 async function removeFile(p, itemId, filename) {
