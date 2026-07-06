@@ -962,7 +962,7 @@ try {
 
 // Phase 3.2 (field-type registry): fieldTypes drives object-part forms + server-side schema validation.
 // Isomorphic (require in Node / <script> in the browser); smoke unit-tests the pure registry.
-const FT = require('../catalog/admin/fieldTypes');
+const FT = require('../catalog/admin/public/fieldTypes');
 check('fieldTypes: registry has the base types; unknown -> string',
   ['string', 'text', 'number', 'boolean', 'select', 'datetime'].every(t => FT.types[t]) &&
   FT.typeOf({ type: 'nope' }) === FT.types.string);
@@ -986,5 +986,17 @@ check('fieldTypes: input renders controls (HTML-escaped)',
   /<textarea/.test(FT.types.text.input('d', 'x', {})) &&
   /<select[^>]*>\s*<option value="s"[^>]*>Small<\/option>/.test(FT.types.select.input('sz', 's', ftSchema.size)) &&
   /type="checkbox"[^>]* checked/.test(FT.types.boolean.input('b', true, {})));
+
+// Phase 3.3 (frontend): the admin UI is generic + self-contained (no CDN). Structural guard — the served
+// assets are wired and drive the generic API + the shared FieldTypes registry. (The browser click-through
+// is manual; the API and registry the UI drives are covered above and verified out of band.)
+const adminPublic = path.join(root, 'catalog', 'admin', 'public');
+const idxHtml = fs.readFileSync(path.join(adminPublic, 'index.html'), 'utf8');
+const appJs = fs.readFileSync(path.join(adminPublic, 'app.js'), 'utf8');
+check('admin UI: self-contained (no CDN) + serves fieldTypes.js and wires both scripts',
+  fs.existsSync(path.join(adminPublic, 'fieldTypes.js')) && !/https?:\/\//.test(idxHtml) &&
+  /src="fieldTypes\.js"/.test(idxHtml) && /src="app\.js"/.test(idxHtml));
+check('admin UI: generic (drives /api/collections + FieldTypes, no hardcoded product API)',
+  /api\/collections/.test(appJs) && !/api\/products/.test(appJs) && /window\.FieldTypes/.test(appJs));
 
 done();

@@ -11,7 +11,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const model = require('./lib/model');
-const fieldTypes = require('./fieldTypes');
+const fieldTypes = require('./public/fieldTypes'); // lives in public/ so it is also served to the browser
 
 const app = express();
 
