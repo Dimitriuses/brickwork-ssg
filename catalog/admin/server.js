@@ -15,7 +15,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Paths. The site being managed is the working directory (set by the CLI:
 // `ssg admin --site <dir>`), so its data lives under cwd, not the engine.
 const ROOT_DIR = process.cwd();
-const DATABASE_PATH = path.join(ROOT_DIR, 'shared/database.json');
+
+// Resolve the collections DB exactly like the build does: `dirs.database` in config.json — a file
+// path, site-root-relative, default shared/database.json. Kept self-contained (no engine require) so
+// an adopted, site-owned copy of this admin needs nothing from the engine.
+function resolveDatabasePath(rootDir) {
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(path.join(rootDir, 'config.json'), 'utf8')); } catch (e) { /* default */ }
+  const rel = (cfg.dirs && typeof cfg.dirs.database === 'string' && cfg.dirs.database.trim())
+    ? cfg.dirs.database.trim() : 'shared/database.json';
+  return path.join(rootDir, rel);
+}
+const DATABASE_PATH = resolveDatabasePath(ROOT_DIR);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -332,7 +343,8 @@ app.listen(PORT, () => {
   console.log('🚀 Admin Panel Started');
   console.log('========================================');
   console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`📁 Managing collections from: ${ROOT_DIR}/shared/`);
+  console.log(`📁 Site: ${ROOT_DIR}`);
+  console.log(`🗄  Database: ${DATABASE_PATH}`);
   console.log('========================================');
   console.log('⚠  Unauthenticated, local development only - do not expose to a network.');
   console.log('Press Ctrl+C to stop');

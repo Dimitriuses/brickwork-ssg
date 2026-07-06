@@ -17,9 +17,7 @@
     "lib/",
     "components/",
     "generators/",
-    "shared/admin/server.js",
-    "shared/admin/public/",
-    "shared/admin/package.json"
+    "catalog/"
   ],
   "dependencies": {
     "express": "^4.18.2",

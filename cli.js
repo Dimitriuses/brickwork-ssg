@@ -2,7 +2,7 @@
 // Engine CLI: `ssg <build|admin|test> [--site <dir>]`.
 //
 // A "site" is a directory holding config.json, pages/, assets/, shared/.
-// The engine (this file, build.js, components/, lib/, admin/) is shared and
+// The engine (this file, build.js, lib/, catalog/) is shared and
 // resolved relative to this file; the build/admin code reads the site from the
 // working directory, so we chdir into the site and let __dirname locate engine
 // files. Default site is the current directory, so `ssg build` == `node build.js`.
@@ -191,7 +191,42 @@ if (command === 'add') {
   configureLogging('build');
   require('./build.js');
 } else if (command === 'admin') {
-  require('./shared/admin/server.js');
+  // Resolve the admin site-first: run the site's own copy (dirs.admin, default shared/admin) if it
+  // owns one; otherwise offer the engine's bundled default (catalog/admin). A missing site admin on a
+  // non-interactive stdin defaults to "no" (don't launch), so scripts never hang on the prompt.
+  const siteAdminDir = require('./lib/dirs').siteDirs(siteRoot).admin;
+  const relAdmin = path.relative(siteRoot, siteAdminDir) || '.';
+  const siteServer = path.join(siteAdminDir, 'server.js');
+  const defaultServer = path.join(__dirname, 'catalog', 'admin', 'server.js');
+
+  // Start an admin server in-process; a missing dependency set is the usual failure, so hint at it.
+  const launch = (serverPath, installDir) => {
+    try { require(serverPath); }
+    catch (e) {
+      if (e && e.code === 'MODULE_NOT_FOUND') {
+        console.error(`Admin dependencies are not installed. Run:  npm --prefix "${installDir}" install`);
+        process.exit(1);
+      }
+      throw e;
+    }
+  };
+
+  if (fs.existsSync(siteServer)) {
+    launch(siteServer, siteAdminDir);                       // the site owns an admin — run it
+  } else {
+    console.error(`No admin panel installed at ${relAdmin}/ (dirs.admin).  Install one with:  ssg add admin`);
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+      rl.question('Launch the bundled default admin instead? (y/N) ', (answer) => {
+        rl.close();
+        if (/^y(es)?$/i.test(String(answer).trim())) launch(defaultServer, __dirname);
+        else process.exit(1);
+      });
+    } else {
+      console.error('(non-interactive: not launching the default — run interactively to use it.)');
+      process.exit(1);
+    }
+  }
 } else { // test
   configureLogging('test');
   require('./build.js');                 // build the site at cwd (sets exitCode on failure)

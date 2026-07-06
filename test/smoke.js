@@ -849,4 +849,39 @@ try {
   try { fs.rmSync(dbtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Phase 2.1 (adopt the admin): the admin now lives in catalog/ (out of shared/), and `ssg admin`
+// resolves site-first via dirs.admin. A site that owns an admin runs it (fake server that exits, so
+// smoke doesn't hang); a site with none warns + exits non-zero (non-TTY defaults to "no"), pointing
+// at `ssg add admin`.
+check('admin relocated to catalog/admin (out of shared/)',
+  fs.existsSync(path.join(root, 'catalog', 'admin', 'server.js')) &&
+  !fs.existsSync(path.join(root, 'shared', 'admin')));
+
+const admtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwadmin-'));
+const admtmpArg = admtmp.replace(/\\/g, '/');
+try {
+  // The site owns an admin at a custom dirs.admin -> ssg admin runs it (a server that exits 0).
+  fs.mkdirSync(path.join(admtmp, 'tools', 'admin'), { recursive: true });
+  fs.writeFileSync(path.join(admtmp, 'config.json'), JSON.stringify({ site: { name: 'AD' }, nav: [], dirs: { admin: 'tools/admin' } }));
+  fs.writeFileSync(path.join(admtmp, 'tools', 'admin', 'server.js'), "console.log('SITE-ADMIN-RAN'); process.exit(0);");
+  const aout = execSync(`node cli.js admin --site "${admtmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  check('ssg admin: site-first resolution runs the site-owned admin (dirs.admin)', /SITE-ADMIN-RAN/.test(aout));
+} finally {
+  try { fs.rmSync(admtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
+const adm2 = fs.mkdtempSync(path.join(os.tmpdir(), 'bwadmin2-'));
+const adm2Arg = adm2.replace(/\\/g, '/');
+try {
+  // No admin installed -> non-zero + actionable hint, no hang (non-interactive stdin => "no").
+  fs.writeFileSync(path.join(adm2, 'config.json'), JSON.stringify({ site: { name: 'AD2' }, nav: [] }));
+  let admExit = 0, admErr = '';
+  try { execSync(`node cli.js admin --site "${adm2Arg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { admExit = e.status || 1; admErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('ssg admin: no admin installed -> non-zero + `ssg add admin` hint (non-TTY default no)',
+    admExit !== 0 && /No admin panel installed/.test(admErr) && /ssg add admin/.test(admErr));
+} finally {
+  try { fs.rmSync(adm2, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
