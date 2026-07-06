@@ -109,7 +109,8 @@ The admin reads `database.json` → each enabled collection → walks its `data_
   `validation` (e.g. min/max/pattern). The admin resolves each `type` through a **field-type registry —
   `admin/fieldTypes.js` in the owned copy** (type name → `{ input, parse, serialize, validate }`), so
   **adding a type is editing one file** — future types (`richtext`, `color`, an image/item reference, …)
-  drop in without touching the core.
+  drop in without touching the core. A schema field may also carry **`hide: true`** — declared in the
+  model but not shown in the form (the field-level counterpart of the part/collection `hide` in Part 4).
 - **`type: "paths"`** (e.g. images) → an **file manager** for that glob: upload (Multer), list, reorder,
   delete. The `match` glob bounds the type; extra upload limits (count/size/accept/ordering) come from the
   **admin config** (Part 4), not `data_model`.
@@ -137,6 +138,7 @@ own settings.
   "collections": {
     "products": {
       "images": { "max_count": 8, "max_size_mb": 5, "accept": ["jpg", "png", "webp"], "orderable": true }
+      // "<part>": { "hide": true }   // hide a part (fields hide via their schema entry; collections: see Q)
     }
   }
   // "auth": … (future: pick a built-in method; for now, write it in the owned server.js)
@@ -145,13 +147,14 @@ own settings.
 
 - **Localhost-only is the default.** The server binds to `127.0.0.1`; the user must explicitly set
   `localhost_only: false` to expose it.
-- **Per-collection / per-part config (Decided).** Keyed `collections.<name>.<part>` and joined to
-  `data_model` by part name. When a collection has an entry, its part keys are the **whitelist of parts
-  the admin shows** — **omitting a `data_model` part hides it** (intentional "table data hiding"); a
-  collection with *no* entry shows all its parts. A part key that matches **no `data_model` part → error**
-  (typo/rename). Each value is that part's admin config: for `paths`/`file_path`, the **upload limits**
-  (max count/size, accepted types beyond the `match` glob, ordering) — these live here, not in
-  `data_model` (a build concern); `{}` = shown with defaults.
+- **Per-collection / per-part config (Decided).** `admin.collections` is **purely additive** —
+  **everything shows by default** (all enabled collections, all their `data_model` parts); omitting a
+  collection or part does *not* hide it. Keyed `collections.<name>.<part>`, joined to `data_model` by part
+  name; a part key that matches **no `data_model` part → error** (typo/rename). Each entry holds that
+  thing's admin config: an explicit **`hide: true`** to hide it (a part — and, per Q, maybe a whole
+  collection), and for `paths`/`file_path` the **upload limits** (max count/size, accepted types beyond
+  the `match` glob, ordering) — kept here, not in `data_model` (a build concern). Field-level hiding is a
+  `hide: true` on the field's `schema` entry (Part 3).
 - **Auth (Decided):** for now, users write their own auth in the owned `server.js`; later, a
   config-selectable method. Never expose without auth.
 
@@ -224,16 +227,18 @@ own settings.
 - **Field-type registry:** custom types by **editing `admin/fieldTypes.js`** in the owned copy.
 - **Non-interactive prompts:** both `(y/n)` prompts default to **no** without a TTY; `--yes` / `--no` /
   `--no-input` (and `--force` for overwrite) set the answer.
-- **`admin.collections` ↔ `data_model` join:** a config part with **no matching `data_model` part →
-  error**; a `data_model` part **omitted** from a present entry is **hidden** ("table data hiding"); a
-  collection with **no entry shows all** its parts.
+- **`admin.collections` is additive; show-all by default:** everything shows unless **explicitly hidden**
+  via `hide: true` (on a field's `schema` entry, or a part — collection-level pending Q); omitting from
+  `admin.collections` never hides. A config part with **no matching `data_model` part → error**.
 
-## Open questions (round 4 — last; otherwise build-ready)
+## Open questions (round 5 — last; otherwise build-ready)
 
-1. **Confirm the show/hide default** *(the one inference left).* Per the join decision: a collection with
-   **no `admin.collections` entry** (i.e. the freshly-seeded state) shows **all** its `data_model` parts;
-   an entry **present** turns its part keys into a whitelist (omitted = hidden). So the default admin
-   shows everything, and hiding is opt-in per collection — right? If instead you want hiding to be the
-   default (nothing shown until listed), that's the alternative — but it's more verbose to set up.
+1. **Collection-level `hide`?** Part-level and field-level `hide: true` are in for v1 (show-all by
+   default, hide only when flagged). Do you also want a **collection-level**
+   `admin.collections.<name>.hide: true` — hide a whole collection from the admin while it still
+   **builds**? Note `enabled: false` in `database.json` already removes a collection from *both* the build
+   and the admin, so a collection `hide` only adds the "built-but-hidden-from-admin" case. *(Lean:
+   support it — same flag one level up, symmetric and cheap; skip only if you'd rather keep `enabled` the
+   single collection switch.)*
 
 *(Everything else is settled — the plan is otherwise build-ready; recommended order Part 1 → 2 → 3 → 4.)*
