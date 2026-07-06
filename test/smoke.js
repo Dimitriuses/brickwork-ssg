@@ -906,7 +906,7 @@ try {
   execSync(`node cli.js add admin --no-install --force --site "${aatmpArg}"`, { cwd: root, stdio: 'pipe' });
   const forced = fs.readFileSync(path.join(aatmp, 'shared', 'admin', 'server.js'), 'utf8');
   check('ssg add admin: existing admin kept without --force; --force overwrites (re-copies catalog)',
-    kept === 'MINE' && forced !== 'MINE' && /resolveDatabasePath/.test(forced));
+    kept === 'MINE' && forced !== 'MINE' && /require\('\.\/lib\/model'\)/.test(forced));
 
   // --folder places the admin elsewhere and repoints dirs.admin (backups / a second admin).
   execSync(`node cli.js add admin --folder tools/adm --no-install --site "${aatmpArg}"`, { cwd: root, stdio: 'pipe' });
@@ -921,6 +921,43 @@ try {
   check('ssg add material admin rejected (use `ssg add admin`)', maExit !== 0 && /ssg add admin/.test(maErr));
 } finally {
   try { fs.rmSync(aatmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
+// Phase 3.1 (data-model-driven admin): the admin's self-contained model helper resolves a collection's
+// data_model the same way the build does — object parts parse JSON, paths list matched files, and the
+// object filename is derivable for writes. (The HTTP API is exercised out of band; express is not an
+// engine dependency, so smoke unit-tests the pure data layer.)
+const adminModel = require('../catalog/admin/lib/model');
+check('admin model: globToRegExp (literal + brace alternation, case-insensitive)',
+  adminModel.globToRegExp('product.json').test('product.json') &&
+  !adminModel.globToRegExp('product.json').test('product_json') &&
+  adminModel.globToRegExp('*.{png,jpg,webp}').test('A.PNG'));
+const amColl = { name: 'products', data_model: {
+  data:   { match: 'product.json', type: 'object', required: true, schema: { name: { type: 'string' } } },
+  images: { match: '*.{png,jpg,webp}', type: 'paths' }
+} };
+const amParts = adminModel.modelParts(amColl);
+check('admin model: modelParts normalizes (type/required/schema/regex)',
+  amParts.length === 2 && amParts[0].type === 'object' && amParts[0].required === true &&
+  !!amParts[0].schema && amParts[1].type === 'paths' && amParts[1].required === false);
+const amtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwadminmodel-'));
+try {
+  fs.writeFileSync(path.join(amtmp, 'product.json'), JSON.stringify({ name: 'Widget', price: '5' }));
+  fs.writeFileSync(path.join(amtmp, '1.png'), 'x');
+  fs.writeFileSync(path.join(amtmp, '2.jpg'), 'x');
+  fs.writeFileSync(path.join(amtmp, 'notes.txt'), 'x'); // matched by no part
+  const values = adminModel.readItemParts(amtmp, amParts);
+  check('admin model: readItemParts (object parsed, paths matched, unmatched ignored)',
+    values.data && values.data.name === 'Widget' &&
+    Array.isArray(values.images) && values.images.length === 2 &&
+    values.images.includes('1.png') && values.images.includes('2.jpg') && !values.images.includes('notes.txt'));
+  const globPart = { name: 'g', match: '*.json', regex: adminModel.globToRegExp('*.json'), type: 'object' };
+  check('admin model: objectFileName (existing match, literal fallback, null for a glob on an empty dir)',
+    adminModel.objectFileName(amtmp, amParts[0]) === 'product.json' &&
+    adminModel.objectFileName(path.join(amtmp, 'nope'), amParts[0]) === 'product.json' &&
+    adminModel.objectFileName(path.join(amtmp, 'nope'), globPart) === null);
+} finally {
+  try { fs.rmSync(amtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
 done();
