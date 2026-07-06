@@ -58,13 +58,15 @@ A new **`admin` kind** in the `ssg add` dispatcher (`page`/`component`/`generato
 per-file gap-filled like `material`; see Re-run).
 
 - **Placement + precedence:** `--folder <dir>` › existing `dirs.admin` › **default `shared/admin/`**.
-- **`dirs.admin` is always recorded.** `ssg add admin` writes `dirs.admin` into `config.json` — the
-  default `"shared/admin"` on a plain run, or the `--folder` value when given (so `--folder` both places
-  the copy *and* sets `dirs.admin`). The admin's location is thus always explicit.
+- **`dirs.admin` recorded + a minimal config seeded (Decided).** `ssg add admin` writes `dirs.admin` into
+  `config.json` (the default `"shared/admin"`, or the `--folder` value — so `--folder` both places the
+  copy *and* sets `dirs.admin`) and seeds a minimal **`admin` block** (`localhost_only: true`, `port`). It
+  does **not** drop an `admin.json` — that's left for when the user isolates the admin (Part 4).
 - **Re-run / update (Decided).** Whole-folder: targeting a folder that **already has an admin** → warn
   *"admin already exists"* + prompt **overwrite `(y/n)`** (`--force` skips the prompt). Targeting a **new
   folder** → copy a fresh admin there and **repoint `dirs.admin`** to it (the previous folder stays on
   disk), so you can keep backups or test alternate admins and switch the active one via `dirs.admin`.
+  Non-TTY defaults to **no** (don't overwrite); `--yes` / `--no` / `--force` set it explicitly.
 - **Source (Decided):** post-slim-core the admin lives in the engine **`catalog/admin/`** as a
   **permanent, non-removable** fixture (flagged so future catalog trimming never drops it); `ssg add
   admin` copies from there. (Interim: relocate `engine/shared/admin/` → `catalog/admin/`.)
@@ -73,7 +75,8 @@ per-file gap-filled like `material`; see Re-run).
   to skip.)
 - **`ssg admin` resolution (Decided).** Read `dirs.admin`; run that folder's server if present. If
   `dirs.admin` is set but the folder is **missing**, print a warning and **prompt** `launch the default
-  (engine) admin? (y/n)`. (Non-interactive behaviour is an open question.)
+  (engine) admin? (y/n)`. **Non-TTY defaults to `no`** (don't launch → exit with the not-found error);
+  `--yes` / `--no` / `--no-input` set the answer explicitly.
 
 ---
 
@@ -103,9 +106,10 @@ The admin reads `database.json` → each enabled collection → walks its `data_
 
   **Field types (v1, expandable — Decided):** `string`, `text` (multiline), `number`, `boolean`,
   `select` (+ `options`), `datetime`; per-field attributes `label`, `required`, `default`, and
-  `validation` (e.g. min/max/pattern). The admin resolves each `type` through a **field-type registry**
-  (type name → input widget + parse/serialize + validate), so **adding a type is registering one entry**
-  — future types (`richtext`, `color`, an image/item reference, …) drop in without touching the core.
+  `validation` (e.g. min/max/pattern). The admin resolves each `type` through a **field-type registry —
+  `admin/fieldTypes.js` in the owned copy** (type name → `{ input, parse, serialize, validate }`), so
+  **adding a type is editing one file** — future types (`richtext`, `color`, an image/item reference, …)
+  drop in without touching the core.
 - **`type: "paths"`** (e.g. images) → an **file manager** for that glob: upload (Multer), list, reorder,
   delete. The `match` glob bounds the type; extra upload limits (count/size/accept/ordering) come from the
   **admin config** (Part 4), not `data_model`.
@@ -141,10 +145,13 @@ own settings.
 
 - **Localhost-only is the default.** The server binds to `127.0.0.1`; the user must explicitly set
   `localhost_only: false` to expose it.
-- **Per-collection / per-part upload limits (Decided).** `paths`/`file_path` constraints (max count, max
-  size, accepted types beyond the `match` glob, ordering) live **here, at the admin level** — `data_model`
-  stays a build concern. Keyed `collections.<name>.<part>`, joined to `data_model` by part name; sensible
-  defaults when omitted.
+- **Per-collection / per-part config (Decided).** Keyed `collections.<name>.<part>` and joined to
+  `data_model` by part name. When a collection has an entry, its part keys are the **whitelist of parts
+  the admin shows** — **omitting a `data_model` part hides it** (intentional "table data hiding"); a
+  collection with *no* entry shows all its parts. A part key that matches **no `data_model` part → error**
+  (typo/rename). Each value is that part's admin config: for `paths`/`file_path`, the **upload limits**
+  (max count/size, accepted types beyond the `match` glob, ordering) — these live here, not in
+  `data_model` (a build concern); `{}` = shown with defaults.
 - **Auth (Decided):** for now, users write their own auth in the owned `server.js`; later, a
   config-selectable method. Never expose without auth.
 
@@ -171,10 +178,11 @@ own settings.
 - **Auto `npm install` is a network + side-effect step.** `ssg add admin` shells out to `npm`; needs npm
   + network, and fails offline. `--no-install` + a printed manual step as the fallback.
 - **`ssg add admin` writes `config.json`.** Only `--register` does that today (for `component`). Setting
-  `dirs.admin` (and maybe seeding the `admin` block) is a config mutation on adopt — reasonable, but note
-  it (and never clobber unrelated keys).
+  `dirs.admin` + seeding a minimal `admin` block is a config mutation on adopt — reasonable, but it must
+  **merge** (never clobber unrelated keys or an existing `admin` block).
 - **Interactive prompts in a CLI.** Both `ssg admin` (missing folder) and `ssg add admin` (overwrite)
-  prompt `(y/n)`; a non-TTY run (CI) needs a defined default / flag — see open Qs.
+  prompt `(y/n)`; a non-TTY run (CI) **defaults to `no`** (`--yes`/`--no`/`--no-input` to control) — so CI
+  never hangs or acts destructively.
 - **Overwrite replaces a customized admin.** `ssg add admin` on an existing folder overwrites the whole
   tree on `y` (not `material`'s per-file preserve) — a customized `server.js` is lost. Adopt into a **new
   folder** (auto-repoints `dirs.admin`) to keep the old as a backup; such backup/test folders accumulate
@@ -184,7 +192,7 @@ own settings.
 - **`data_model` `object` part with no `schema`.** Raw-JSON editor until a schema is added — usable, not
   the goal; make the fallback obvious in the UI.
 
-## Decided (rounds 1–2)
+## Decided (rounds 1–3)
 
 - **Field schema lives in `database.json`**, on the `data_model` `object` part — as a separate **`schema`**
   key (recommended) rather than replacing `type`.
@@ -211,22 +219,21 @@ own settings.
 - **`ssg add admin` re-run:** whole-folder — existing folder → prompt **overwrite**; new folder → copy +
   **repoint `dirs.admin`** (previous stays as a backup / test admin).
 - **Config singletons:** **deferred to the CMS** (confirmed).
+- **Admin config seeding:** `ssg add admin` sets `dirs.admin` + seeds a **minimal `admin` block**
+  (`localhost_only`/`port`); no `admin.json` (left for isolation).
+- **Field-type registry:** custom types by **editing `admin/fieldTypes.js`** in the owned copy.
+- **Non-interactive prompts:** both `(y/n)` prompts default to **no** without a TTY; `--yes` / `--no` /
+  `--no-input` (and `--force` for overwrite) set the answer.
+- **`admin.collections` ↔ `data_model` join:** a config part with **no matching `data_model` part →
+  error**; a `data_model` part **omitted** from a present entry is **hidden** ("table data hiding"); a
+  collection with **no entry shows all** its parts.
 
-## Open questions (round 3)
+## Open questions (round 4 — last; otherwise build-ready)
 
-1. **`admin.json` seeding + precedence.** Confirm the loader: `<dirs.admin>/admin.json` if present, else
-   `config.json`'s `admin` block. And on adopt, does `ssg add admin` **seed** a starter config — write a
-   default `admin` block into `config.json`, drop a starter `admin.json` in the copied folder, or **neither**
-   (just set `dirs.admin`, everything else defaulted in code)? *(Leaning: set `dirs.admin`; seed a minimal
-   `admin` block; leave `admin.json` for the user to create when they isolate.)*
-2. **Field-type registry — where custom types register.** Since the admin is owned, a new `type` is added
-   by editing a module in the copied admin (e.g. `admin/fieldTypes.js` → `{ input, parse, serialize,
-   validate }`). Is *edit-the-owned-code* the intended extension point, or should custom types be declared
-   in the admin config and mapped to a widget? (Owned-code is simplest; config-declared is more "no-code".)
-3. **Non-interactive prompts.** Both `ssg admin` (missing `dirs.admin` folder) and `ssg add admin`
-   (overwrite an existing admin) prompt `(y/n)`. With **no TTY** (CI / piped), what's the default —
-   proceed with the safe option (engine admin / *don't* overwrite), error, or gate on a flag
-   (`--yes` / `--default` / `--no-input`)?
-4. **`admin.collections` ↔ `data_model` join.** Upload limits key on `collections.<name>.<part>`, matched
-   to `data_model` by name. If a config part doesn't match any `data_model` part (typo, renamed), **warn
-   and ignore** (my lean) or **error**? And are per-part limits **merged over** admin-wide defaults?
+1. **Confirm the show/hide default** *(the one inference left).* Per the join decision: a collection with
+   **no `admin.collections` entry** (i.e. the freshly-seeded state) shows **all** its `data_model` parts;
+   an entry **present** turns its part keys into a whitelist (omitted = hidden). So the default admin
+   shows everything, and hiding is opt-in per collection — right? If instead you want hiding to be the
+   default (nothing shown until listed), that's the alternative — but it's more verbose to set up.
+
+*(Everything else is settled — the plan is otherwise build-ready; recommended order Part 1 → 2 → 3 → 4.)*
