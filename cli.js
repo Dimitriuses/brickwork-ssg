@@ -23,6 +23,9 @@ for (let i = 1; i < argv.length; i++) {
   else if (arg === '--force') flags.force = true;
   else if (arg === '--dry-run') flags.dryRun = true;
   else if (arg === '--all-used') flags.allUsed = true;
+  else if (arg === '--yes') flags.yes = true;                                 // add admin: overwrite an existing one
+  else if (arg === '--no') flags.no = true;                                   // add admin: keep the existing one
+  else if (arg === '--no-install') flags.noInstall = true;                    // add admin: skip the npm install
   else if (arg === '--register') flags.register = true;                       // add component --register
   else if (arg.startsWith('--folder=')) flags.folder = arg.slice('--folder='.length);
   else if (arg === '--folder') flags.folder = argv[++i];                      // add component --folder <dir>
@@ -41,6 +44,7 @@ function fail(message) {
   console.error('       ssg init [dir] [--template demo] [--force] [--dry-run]   scaffold a site into dir');
   console.error('       ssg add <page|component|generator|builder|test> <name>   scaffold new material');
   console.error('       ssg add material <name> | --all-used [--force] [--dry-run]   adopt engine material(s)');
+  console.error('       ssg add admin [--folder <dir>] [--force] [--no-install]   adopt the admin panel');
   process.exit(1);
 }
 
@@ -108,7 +112,7 @@ function configureLogging(cmd) {
 if (command === 'add') {
   configureLogging('add');
   const log = require('./lib/log');
-  const KINDS = ['page', 'component', 'generator', 'builder', 'test', 'material'];
+  const KINDS = ['page', 'component', 'generator', 'builder', 'test', 'material', 'admin'];
   const kind = positionals[0];
   const name = positionals[1];
   if (!KINDS.includes(kind)) {
@@ -153,6 +157,7 @@ if (command === 'add') {
     }
 
     if (!name) fail('ssg add material <name>   (or: ssg add material --all-used)');
+    if (name === 'admin') fail('"admin" is an app, not a component material — use: ssg add admin');
     const res = deployMaterial(name, deployOpts);
     if (!res.exists) { log.error(`no material "${name}" in the engine catalog`, { phase: 'add' }); process.exit(1); }
     const c = report(name, res);
@@ -163,6 +168,65 @@ if (command === 'add') {
     ].filter(Boolean).join(', ');
     log.success(`${verb} ${c.copied} file(s) for "${name}"${extra ? ` (${extra})` : ''}`, { phase: 'add' });
     process.exit(0);
+  }
+
+  if (kind === 'admin') {
+    // Adopt the bundled admin (catalog/admin) into the site as its own copy: place it at dirs.admin
+    // (--folder overrides), record dirs.admin + a minimal `admin` block in config.json, then install
+    // its deps (opt out with --no-install). Re-adopting an existing folder needs an explicit yes.
+    const { copyDirSync, adminTarget, writeAdminConfig } = require('./lib/admin');
+    const { spawnSync } = require('child_process');
+    const catalogAdmin = path.join(__dirname, 'catalog', 'admin');
+    let cfg = {};
+    try { cfg = JSON.parse(fs.readFileSync(path.join(siteRoot, 'config.json'), 'utf8')); } catch (e) { /* none */ }
+    const { dir: targetDir, rel: targetRel } = adminTarget(siteRoot, cfg, flags.folder);
+    const existed = fs.existsSync(path.join(targetDir, 'server.js'));
+
+    // Copy + config write + optional install, then report and exit.
+    const finish = () => {
+      if (flags.dryRun) {
+        log.success(`would adopt the admin into ${targetRel}/ (from the engine catalog)`, { phase: 'add' });
+        process.exit(0);
+      }
+      const files = copyDirSync(catalogAdmin, targetDir);
+      const changed = writeAdminConfig(siteRoot, targetRel);
+      log.info(`  + ${targetRel}/ (${files} file(s))`, { phase: 'add' });
+      if (changed) log.info(`  ~ config.json (dirs.admin${cfg.admin ? '' : ' + admin block'})`, { phase: 'add' });
+      if (flags.noInstall) {
+        log.flushWarnings();
+        log.success(`adopted the admin into ${targetRel}/ — run \`npm --prefix "${targetRel}" install\`, then \`ssg admin\``, { phase: 'add' });
+        process.exit(0);
+      }
+      // Install the admin's deps (express/multer). This is the one place the engine reaches the network;
+      // our build commitment stays zero-dependency, so this is opt-out (--no-install).
+      log.info('installing admin dependencies (npm install)…', { phase: 'add' });
+      const r = spawnSync('npm', ['install'], { cwd: targetDir, stdio: 'inherit', shell: process.platform === 'win32' });
+      log.flushWarnings();
+      if (r.status !== 0) {
+        log.error(`npm install failed in ${targetRel}/ — install manually, then run \`ssg admin\``, { phase: 'add' });
+        process.exit(1);
+      }
+      log.success(`adopted the admin into ${targetRel}/ — run \`ssg admin\` to launch it`, { phase: 'add' });
+      process.exit(0);
+    };
+
+    if (existed && !(flags.force || flags.yes)) {
+      // Keep the existing admin unless the user explicitly says overwrite (flag or an interactive y).
+      if (flags.no || !(process.stdin.isTTY && process.stdout.isTTY)) {
+        log.warn(`an admin already exists at ${targetRel}/ — kept as-is (use --force to overwrite)`, { phase: 'add' });
+        log.flushWarnings();
+        process.exit(0);
+      }
+      const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+      rl.question(`An admin already exists at ${targetRel}/. Overwrite? (y/N) `, (answer) => {
+        rl.close();
+        if (/^y(es)?$/i.test(String(answer).trim())) finish();
+        else { log.info('kept the existing admin.', { phase: 'add' }); process.exit(0); }
+      });
+    } else {
+      finish();
+    }
+    return; // finish()/the prompt callback own the exit
   }
 
   // Author-new kinds (page / component / generator / builder): scaffold starter stubs.

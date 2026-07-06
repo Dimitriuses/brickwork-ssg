@@ -884,4 +884,43 @@ try {
   try { fs.rmSync(adm2, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Phase 2.2 (ssg add admin): adopt the bundled admin into a site — copy catalog/admin -> dirs.admin and
+// record dirs.admin + a minimal admin block in config.json. --no-install keeps smoke offline (the npm
+// install path is verified out of band). Re-adopting needs an explicit --force; --folder repoints.
+const aatmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwaddadmin-'));
+const aatmpArg = aatmp.replace(/\\/g, '/');
+try {
+  fs.writeFileSync(path.join(aatmp, 'config.json'), JSON.stringify({ site: { name: 'AA' }, nav: [] }));
+  execSync(`node cli.js add admin --no-install --site "${aatmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const cfg = JSON.parse(fs.readFileSync(path.join(aatmp, 'config.json'), 'utf8'));
+  check('ssg add admin: copies catalog/admin -> dirs.admin + seeds config (dirs.admin + admin block)',
+    fs.existsSync(path.join(aatmp, 'shared', 'admin', 'server.js')) &&
+    fs.existsSync(path.join(aatmp, 'shared', 'admin', 'public', 'index.html')) &&
+    cfg.dirs && cfg.dirs.admin === 'shared/admin' &&
+    cfg.admin && cfg.admin.localhost_only === true && cfg.admin.port === 3000);
+
+  // Re-run without --force (non-interactive) keeps the existing admin; --force overwrites it.
+  fs.writeFileSync(path.join(aatmp, 'shared', 'admin', 'server.js'), 'MINE');
+  execSync(`node cli.js add admin --no-install --site "${aatmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const kept = fs.readFileSync(path.join(aatmp, 'shared', 'admin', 'server.js'), 'utf8');
+  execSync(`node cli.js add admin --no-install --force --site "${aatmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const forced = fs.readFileSync(path.join(aatmp, 'shared', 'admin', 'server.js'), 'utf8');
+  check('ssg add admin: existing admin kept without --force; --force overwrites (re-copies catalog)',
+    kept === 'MINE' && forced !== 'MINE' && /resolveDatabasePath/.test(forced));
+
+  // --folder places the admin elsewhere and repoints dirs.admin (backups / a second admin).
+  execSync(`node cli.js add admin --folder tools/adm --no-install --site "${aatmpArg}"`, { cwd: root, stdio: 'pipe' });
+  const cfg2 = JSON.parse(fs.readFileSync(path.join(aatmp, 'config.json'), 'utf8'));
+  check('ssg add admin: --folder places the copy + repoints dirs.admin',
+    fs.existsSync(path.join(aatmp, 'tools', 'adm', 'server.js')) && cfg2.dirs.admin === 'tools/adm');
+
+  // `admin` is an app, not a component material — `ssg add material admin` is rejected with a hint.
+  let maExit = 0, maErr = '';
+  try { execSync(`node cli.js add material admin --site "${aatmpArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { maExit = e.status || 1; maErr = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('ssg add material admin rejected (use `ssg add admin`)', maExit !== 0 && /ssg add admin/.test(maErr));
+} finally {
+  try { fs.rmSync(aatmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
