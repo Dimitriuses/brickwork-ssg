@@ -151,7 +151,7 @@ it needs a window-based generation model (below) and is a large task in its own 
 - **npm-distributed third-party plugins/themes + a material registry** — third-party/shared
   distribution (e.g. a community "materials" project people add to), once the deploy model
   is proven.
-- **Admin panel extension** *(own track — substantial; drafting)* — today `ssg admin` is a single
+- **Admin panel extension** *(own track — substantial; **planned, ready to build**)* — today `ssg admin` is a single
   Express + Multer server (`shared/admin/server.js`) **hardcoded to the products/images CRUD**. Make it
   **per-site extensible**: drive which collections/fields it edits from each collection's `data_model`
   instead of hardcoding, let a site **own + customize** it via **`ssg add admin`** (adopt/copy into

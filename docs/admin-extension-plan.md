@@ -1,10 +1,10 @@
-# Admin panel extension — draft plan (for discussion)
+# Admin panel extension — implementation plan
 
-> **Status: draft, refined (round 1 answered).** Expands the **Admin panel extension** item in
+> **Status: finalized — ready to build.** Expands the **Admin panel extension** item in
 > [ROADMAP.md](../ROADMAP.md). The admin becomes a **data-management surface derived from each
 > collection's `data_model`**, **owned by the site** (adopted via `ssg add admin`), with `database.json`'s
-> location made configurable and its own settings/security config. The **Decided** section locks the
-> round-1 answers; **Open questions** are the next round.
+> location made configurable and its own settings/security config. All questions resolved (see
+> **Decided (final)**); the **Implementation plan (phases & commits)** is at the bottom.
 
 ## The pieces (recommended order 1 → 2 → 3 → 4)
 
@@ -138,7 +138,7 @@ own settings.
   "collections": {
     "products": {
       "images": { "max_count": 8, "max_size_mb": 5, "accept": ["jpg", "png", "webp"], "orderable": true }
-      // "<part>": { "hide": true }   // hide a part (fields hide via their schema entry; collections: see Q)
+      // "<part>": { "hide": true }   // hide a part (fields hide via their schema entry; collections via database.json `enabled`)
     }
   }
   // "auth": … (future: pick a built-in method; for now, write it in the owned server.js)
@@ -151,9 +151,10 @@ own settings.
   **everything shows by default** (all enabled collections, all their `data_model` parts); omitting a
   collection or part does *not* hide it. Keyed `collections.<name>.<part>`, joined to `data_model` by part
   name; a part key that matches **no `data_model` part → error** (typo/rename). Each entry holds that
-  thing's admin config: an explicit **`hide: true`** to hide it (a part — and, per Q, maybe a whole
-  collection), and for `paths`/`file_path` the **upload limits** (max count/size, accepted types beyond
-  the `match` glob, ordering) — kept here, not in `data_model` (a build concern). Field-level hiding is a
+  thing's admin config: an explicit **`hide: true`** to hide a **part** (whole collections use
+  **`enabled`** in `database.json` — the single build+admin switch; no separate admin collection-hide),
+  and for `paths`/`file_path` the **upload limits** (max count/size, accepted types beyond the `match`
+  glob, ordering) — kept here, not in `data_model` (a build concern). Field-level hiding is a
   `hide: true` on the field's `schema` entry (Part 3).
 - **Auth (Decided):** for now, users write their own auth in the owned `server.js`; later, a
   config-selectable method. Never expose without auth.
@@ -195,7 +196,7 @@ own settings.
 - **`data_model` `object` part with no `schema`.** Raw-JSON editor until a schema is added — usable, not
   the goal; make the fallback obvious in the UI.
 
-## Decided (rounds 1–3)
+## Decided (final)
 
 - **Field schema lives in `database.json`**, on the `data_model` `object` part — as a separate **`schema`**
   key (recommended) rather than replacing `type`.
@@ -228,17 +229,53 @@ own settings.
 - **Non-interactive prompts:** both `(y/n)` prompts default to **no** without a TTY; `--yes` / `--no` /
   `--no-input` (and `--force` for overwrite) set the answer.
 - **`admin.collections` is additive; show-all by default:** everything shows unless **explicitly hidden**
-  via `hide: true` (on a field's `schema` entry, or a part — collection-level pending Q); omitting from
-  `admin.collections` never hides. A config part with **no matching `data_model` part → error**.
+  via `hide: true` (on a field's `schema` entry, or a part); omitting from `admin.collections` never
+  hides. A config part with **no matching `data_model` part → error**.
+- **Collection show/hide = `database.json` `enabled`** (existing switch — drops the collection from
+  *both* the build and the admin); no separate admin-level collection hide.
 
-## Open questions (round 5 — last; otherwise build-ready)
+## Implementation plan (phases & commits)
 
-1. **Collection-level `hide`?** Part-level and field-level `hide: true` are in for v1 (show-all by
-   default, hide only when flagged). Do you also want a **collection-level**
-   `admin.collections.<name>.hide: true` — hide a whole collection from the admin while it still
-   **builds**? Note `enabled: false` in `database.json` already removes a collection from *both* the build
-   and the admin, so a collection `hide` only adds the "built-but-hidden-from-admin" case. *(Lean:
-   support it — same flag one level up, symmetric and cheap; skip only if you'd rather keep `enabled` the
-   single collection switch.)*
+No open questions. `npm test` green after each commit; every commit ships a smoke check. **Phase 1 is
+independently shippable** (a clean build-side win); **Phase 3 is the bulk**. Admin deps (`express`,
+`multer`) are opt-in — the engine's *build* stays zero-dependency.
 
-*(Everything else is settled — the plan is otherwise build-ready; recommended order Part 1 → 2 → 3 → 4.)*
+### Phase 1 — `dirs.database` *(foundation; additive)*
+- **P1.** `lib/dirs.js`: add `database` (default `"shared/database.json"`) to `DEFAULT_DIRS`; `build.js`
+  reads `siteDirs(SITE_ROOT).database` for `DATABASE_FILE`. Smoke: a site with `dirs.database` at a custom
+  path builds. *(No site change; sites can set it whenever.)*
+
+### Phase 2 — adopt the admin (`ssg add admin`)
+- **P2.1 — relocate + resolve.** `git mv engine/shared/admin/` → **`catalog/admin/`** (flag it
+  non-removable via a `catalog/admin/README`); `cli.js` `ssg admin` resolves **site-first via `dirs.admin`**,
+  else `catalog/admin`, and on a **missing** `dirs.admin` folder warns + prompts `(y/n)` (non-TTY → **no**)
+  to launch the default; the admin's `DATABASE_PATH` reads `dirs.database` (the two readers converge).
+  Smoke: resolution + the missing-folder path.
+- **P2.2 — the `admin` kind.** Add `admin` to the `ssg add` dispatcher: copy `catalog/admin` → target
+  (`--folder` › `dirs.admin` › default `shared/admin`), **merge** `dirs.admin` + a minimal `admin` block
+  into `config.json`, **auto `npm install`** (`--no-install` to skip), **overwrite-prompt** on an existing
+  folder (`--yes`/`--no`/`--force`), **repoint `dirs.admin`** on a new folder. Smoke: adopt into a temp
+  site (copy + config merge + dispatch, offline-safe; the install path verified out of band).
+
+### Phase 3 — data-model-driven CRUD *(the core — split)*
+- **P3.1 — backend + config + security.** Rework `server.js` to be data-model-driven: read `database.json`
+  (via `dirs.database`) → `enabled` collections → walk `data_model`; a generic API (list collections /
+  items / read+write an item's parts). Per part: `object` read/write, `paths`/`file_path` upload/list/
+  delete. Load the admin config (`<dirs.admin>/admin.json` else `config.json.admin`) → `localhost_only`
+  (**bind `127.0.0.1` by default**), `port`, per-part upload limits + `hide`. **Validate** `admin.collections`
+  part names vs `data_model` (error on mismatch). Reuse the engine's item reader (factor
+  `resolveCollectionItems` into `lib/`). Test: drive the API against a fixture site.
+- **P3.2 — field-type registry + schema forms.** `admin/fieldTypes.js` (string/text/number/boolean/select/
+  datetime → `{ input, parse, serialize, validate }`); `object`-part form built from the part's `schema`
+  (fields, types, per-field `hide`); raw-JSON fallback when a part has no `schema`.
+- **P3.3 — frontend.** `public/index.html` + `app.js`: render the generated CRUD per part (schema form for
+  `object`; file manager for `paths`/`file_path`) honouring `hide` + the upload limits. Manual/e2e check
+  against a fixture site.
+
+### Phase 4 — docs & wrap-up
+- **P4.** README/CLAUDE (`ssg add admin`, `dirs.database`, the `admin` block + localhost default),
+  ROADMAP item marked done, this plan marked shipped. (A task-oriented admin guide rides with the
+  end-user-docs roadmap task.)
+
+**Then the sites:** `ssg add admin` on the demo (public — exercise it end to end) and the private site
+(add `schema`s to its `products`/`custom` `object` parts; adopt the admin; the real data stays gitignored).
