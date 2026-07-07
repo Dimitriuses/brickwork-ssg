@@ -290,9 +290,12 @@ function buildPage(pageConfig, pageName) {
   
   if (pageData.components && pageData.components.length > 0) {
     log.debug(`  [COMPONENTS] Building ${pageData.components.length} component(s)`, { phase: 'pages' });
-    
+
     pageData.components.forEach(comp => {
-      const componentHtml = buildComponent(comp.name, comp.vars || {});
+      // Site config (flatConfig) is the base, the component's own vars override — the SAME scope an
+      // inline {{COMPONENT:x}} and a layout dependency (header/footer) already get, so a component
+      // renders identically however it is placed (e.g. {{SITE_NAME}} works in a declared card too).
+      const componentHtml = buildComponent(comp.name, { ...flatConfig, ...(comp.vars || {}) });
       
       // Check if component has a placeholder in content
       const placeholder = `{{COMPONENT:${comp.name}}}`;

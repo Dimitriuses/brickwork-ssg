@@ -752,6 +752,28 @@ try {
   try { fs.rmSync(btmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Component var scope is uniform: a DECLARED component (in components: []) renders with flatConfig
+// as its base + its own vars on top — the same scope an inline {{COMPONENT:x}} and header/footer get
+// — so config vars like {{SITE_NAME}} fill however the component is placed, and its own vars override.
+const scopetmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwscope-'));
+const scopeArg = scopetmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(scopetmp, p)), { recursive: true }); fs.writeFileSync(path.join(scopetmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'ScopeSite' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('components/card/card.html', '<div class="card">site={{SITE_NAME}} own={{CARD_LABEL}}</div>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', title: 'T', layout: '_layout',
+    components: [{ name: 'card', vars: { CARD_LABEL: 'hello' } }] }));
+  mk('pages/index/index.html', '<main>body</main>');
+  fs.mkdirSync(path.join(scopetmp, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${scopeArg}"`, { cwd: root, stdio: 'pipe' });
+  const out = fs.readFileSync(path.join(scopetmp, 'build', 'index.html'), 'utf8');
+  check('component scope: a declared component gets flatConfig base + its own vars',
+    /<div class="card">site=ScopeSite own=hello<\/div>/.test(out));
+} finally {
+  try { fs.rmSync(scopetmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // replaceVariables is single-pass: a placeholder appearing inside a VALUE is left literal (not
 // re-substituted by a later var), regardless of key order. Guards the data→template injection channel
 // (untrusted text like "{{JS_SCRIPTS}}" cannot pull build internals into the page).

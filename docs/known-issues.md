@@ -124,7 +124,7 @@ literally while `ZZZ` itself still resolves.
 
 **Status.** ✅ Fixed.
 
-## A component's vars depend on *how* it was placed — three different scopes
+## ✅ A component's vars depend on *how* it was placed — three different scopes *(fixed)*
 
 **Symptom.** The same component renders with different data depending on the mechanism: **declared**
 in `components: []` → only its own `vars` (`buildComponent(comp.name, comp.vars || {})` — no config
@@ -137,12 +137,14 @@ page component vars, even if the same component is also declared with vars); **l
 a three-branch answer. It also blocks a component from being moved between placement styles without
 re-plumbing its vars.
 
-**Fix (sketch).** One scope rule: declared components render with `{ ...flatConfig, ...comp.vars }`
-(site config as base, own vars override — mirroring `pageVars`); inline placeholders keep
-`flatConfig`. One-line change in `buildPage`; verify against both sites (a component relying on a
-var being *absent* is unlikely but the bump is behavior-changing — release-note it).
+**Fix.** ✅ Done. `buildPage` now builds a declared component with
+`{ ...flatConfig, ...(comp.vars || {}) }` — site config as the base, the component's own vars on top
+— matching the scope an inline `{{COMPONENT:x}}` and a layout dependency already get. So a component
+renders identically however it is placed, and `{{SITE_NAME}}` fills in a declared card. **Behavior
+change** (a declared component now sees config vars it didn't before; its own vars still win) —
+release-noted. Both first-party sites build unchanged; smoke asserts the base+override scope.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## `ssg test` hardcodes `build/` — a site with a relocated `dirs.output` can never pass
 
