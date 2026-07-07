@@ -30,7 +30,7 @@ its message *and the source survives*, plus a valid `dist` still builds.
 
 **Status.** ✅ Fixed.
 
-## `log.error` doesn't fail the build — some errors exit 0 as "completed successfully"
+## ✅ `log.error` doesn't fail the build — some errors exit 0 as "completed successfully" *(fixed)*
 
 **Symptom.** `build.js` keys the exit code and the summary verdict off its own `buildErrors`
 counter, not the logger's tally — and not every `log.error` call site increments it. *Reproduced:* a
@@ -43,11 +43,14 @@ so a template page "successfully" builds zero pages.
 **Why it matters.** CI ships a site with no products and a green build. Two parallel error tallies
 is exactly the drift the log module was built to end.
 
-**Fix (sketch).** At the end of `build.js`: `buildErrors = Math.max(buildErrors, log.errorCount)`
-before `log.summary(...)` (or drop `buildErrors` entirely and use `log.errorCount`). Then delete the
-per-site increments that only exist to mirror it.
+**Fix.** ✅ Done. `build.js` now reconciles at the end:
+`const errorCount = Math.max(buildErrors, log.errorCount)`, and both the summary verdict and the
+exit code key off `errorCount`. The logger's tally is the source of truth, so **any** `log.error`
+fails the build even if a call site forgot to bump the local counter (belt-and-suspenders that also
+guards future error sites). Smoke builds a site with a missing collection source and asserts a
+non-zero exit + a FAILED verdict.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## No page-config validation — a config without `page` ships `build/undefined.html`
 

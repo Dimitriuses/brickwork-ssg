@@ -780,6 +780,28 @@ try {
   try { fs.rmSync(dirtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Error tally: any log.error fails the build. A missing collection source logs an error but did NOT
+// bump the local buildErrors counter — the build now keys its exit off the logger's tally, so it
+// exits non-zero (was a silent "completed successfully", exit 0).
+const errtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwerr-'));
+const errArg = errtmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(errtmp, p)), { recursive: true }); fs.writeFileSync(path.join(errtmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'E' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main>hi</main>');
+  mk('shared/database.json', JSON.stringify({ collections: [{ name: 'ghost', source: 'shared/missing', destination: 'ghost', enabled: true }] }));
+  fs.mkdirSync(path.join(errtmp, 'assets', 'images'), { recursive: true });
+  let errExit = 0, errOut = '';
+  try { execSync(`node cli.js build --site "${errArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { errExit = e.status || 1; errOut = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('error tally: a missing collection source fails the build (exit non-zero)',
+    errExit !== 0 && /Source not found/.test(errOut) && /Build FAILED/.test(errOut));
+} finally {
+  try { fs.rmSync(errtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Output-dir guard: the build wipes dirs.output every run, so a mis-set output ("." , ".." , or a
 // source dir like "pages") must FAIL loudly BEFORE the wipe — never delete site source.
 const guardtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwguard-'));

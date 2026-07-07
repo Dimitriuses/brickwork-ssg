@@ -964,13 +964,18 @@ if (unresolvedIn.length) {
     '`ssg test` fails on these.', { phase: 'pages' });
 }
 
+// Reconcile the error tally with the logger's own count: the logger owns the truth (some log.error
+// call sites — e.g. a missing collection source — don't touch buildErrors), so any error emitted
+// through log fails the build even if a call site forgot to bump the local counter.
+const errorCount = Math.max(buildErrors, log.errorCount);
+
 // Flush the grouped warnings, then the verdict — coloured by outcome (traffic-light), text
 // byte-identical to before when colour is off (e.g. piped/CI).
 log.summary({
   pagesBuilt,
-  errors: buildErrors,
+  errors: errorCount,
   elapsedMs: Date.now() - buildStart,
   outputDir: `${path.relative(SITE_ROOT, BUILD_DIR)}/`
 });
 // Non-zero exit so CI / scripts fail loudly instead of shipping a broken site.
-if (buildErrors > 0) process.exitCode = 1;
+if (errorCount > 0) process.exitCode = 1;
