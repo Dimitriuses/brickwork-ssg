@@ -902,7 +902,7 @@ findPageFiles(PAGES_DIR);
 //                                          literally); found regardless of any "_".
 //  - else a "_"-prefixed path segment  => excluded (examples/drafts/template internals;
 //                                          the "_" is an author comment, never emitted).
-//  - else                              => normal page.
+//  - else                              => normal page (must carry a non-empty string `page`).
 const normalPageFiles = [];
 const templatePages = [];
 for (const pageFile of pageFiles) {
@@ -919,7 +919,17 @@ for (const pageFile of pageFiles) {
     continue;
   }
   const excluded = path.relative(PAGES_DIR, pageFile).split(path.sep).some(seg => seg.startsWith('_'));
-  if (!excluded) normalPageFiles.push(pageFile);
+  if (excluded) continue;
+  // A normal page needs a non-empty string `page` (its output filename). Without this the build
+  // wrote build/undefined.html; and since findPageFiles collects EVERY .json under pages/, a stray
+  // data/notes JSON would become a bogus page. Fail loud with the path instead (prefix with "_" to
+  // exclude a non-page JSON).
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg) || typeof cfg.page !== 'string' || cfg.page.trim() === '') {
+    log.error(`${path.relative(SITE_ROOT, pageFile)}: not a valid page config — needs a non-empty string "page" (its output name). Prefix the file/folder with "_" to exclude a non-page JSON.`, { phase: 'pages' });
+    buildErrors++;
+    continue;
+  }
+  normalPageFiles.push(pageFile);
 }
 
 log.info(`[PAGES] Found ${normalPageFiles.length} page(s) + ${templatePages.length} template(s)\n`, { phase: 'pages' });

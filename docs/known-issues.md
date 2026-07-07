@@ -52,7 +52,7 @@ non-zero exit + a FAILED verdict.
 
 **Status.** ✅ Fixed.
 
-## No page-config validation — a config without `page` ships `build/undefined.html`
+## ✅ No page-config validation — a config without `page` ships `build/undefined.html` *(fixed)*
 
 **Symptom.** `buildPage` uses `pageData.page` unchecked: a page `.json` missing the `page` field
 writes **`build/undefined.html`** (*reproduced*, exit 0, no warning). The auto-content lookup also
@@ -63,12 +63,14 @@ data/notes JSON dropped in a page folder becomes a "page" too.
 **Why it matters.** The engine's stated philosophy is loud build-time validation (template pages
 get it; data models get it) — normal pages, the most common material, get none.
 
-**Fix (sketch).** Validate on classification: a non-template page config must have a non-empty
-string `page` (error with the file path otherwise, same style as `expandTemplatePage`'s `fail`).
-Consider requiring a minimal shape (`page` + optional known keys) so foreign JSON files are
-rejected by name instead of built.
+**Fix.** ✅ Done. The classification loop in `build.js` now rejects a non-template, non-excluded
+config that lacks a non-empty string `page`: a **loud build error with the file path** (and a hint
+to prefix a non-page JSON with `_`) instead of `undefined.html`. Foreign JSON dropped in `pages/` is
+caught by name; the `_`-prefix escape hatch still excludes intentional non-page JSON. Smoke asserts
+a page-less config fails (no `undefined.html`), a `_`-prefixed one is excluded, and a valid page
+still builds.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Page-folder assets: nested pages ignored, excluded `_` folders still copied, `_`-strip collides
 

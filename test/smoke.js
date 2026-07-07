@@ -802,6 +802,36 @@ try {
   try { fs.rmSync(errtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Page-config validation: a normal page config missing a non-empty string `page` used to ship
+// build/undefined.html silently. It now fails the build with the file path; a "_"-prefixed non-page
+// JSON is still just excluded (the escape hatch), and a valid page still builds.
+const pvtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwpv-'));
+const pvArg = pvtmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(pvtmp, p)), { recursive: true }); fs.writeFileSync(path.join(pvtmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'PV' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('pages/good/good.json', JSON.stringify({ page: 'good', title: 'Good', layout: '_layout', components: [] }));
+  mk('pages/good/good.html', '<main>good</main>');
+  mk('pages/nopage/nopage.json', JSON.stringify({ title: 'no page field', layout: '_layout', components: [] }));
+  mk('pages/nopage/nopage.html', '<main>hi</main>');
+  fs.mkdirSync(path.join(pvtmp, 'assets', 'images'), { recursive: true });
+  let pvExit = 0, pvOut = '';
+  try { execSync(`node cli.js build --site "${pvArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { pvExit = e.status || 1; pvOut = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('page validation: missing `page` fails the build (no undefined.html)',
+    pvExit !== 0 && /not a valid page config/.test(pvOut) && /nopage\.json/.test(pvOut) &&
+    !fs.existsSync(path.join(pvtmp, 'build', 'undefined.html')));
+  // Rename the offender under a "_" folder → excluded; the build passes and the valid page builds.
+  fs.renameSync(path.join(pvtmp, 'pages', 'nopage'), path.join(pvtmp, 'pages', '_nopage'));
+  execSync(`node cli.js build --site "${pvArg}"`, { cwd: root, stdio: 'pipe' });
+  check('page validation: "_"-prefixed non-page JSON is excluded; valid page builds',
+    fs.existsSync(path.join(pvtmp, 'build', 'good.html')) &&
+    !fs.existsSync(path.join(pvtmp, 'build', 'undefined.html')));
+} finally {
+  try { fs.rmSync(pvtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Output-dir guard: the build wipes dirs.output every run, so a mis-set output ("." , ".." , or a
 // source dir like "pages") must FAIL loudly BEFORE the wipe — never delete site source.
 const guardtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwguard-'));
