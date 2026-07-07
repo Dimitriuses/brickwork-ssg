@@ -6,7 +6,7 @@ const { resolveGenerator } = require('./lib/generators');
 const { globToRegExp } = require('./lib/glob');
 const log = require('./lib/log');
 const { createComponents } = require('./lib/components');
-const { siteDirs } = require('./lib/dirs');
+const { siteDirs, outputDirError } = require('./lib/dirs');
 
 // Path roots. The engine (this script, components, lib, layout) is shared by
 // every site; the site being built is the current working directory. Splitting
@@ -835,6 +835,15 @@ log.info('========================================\n', { phase: 'build' });
 
 const buildStart = Date.now();
 let buildErrors = 0;  // any generator/page failure makes the build exit non-zero
+
+// Guard the destructive wipe: a mis-set `dirs.output` (".", "..", "pages", …) would delete site
+// source. Validate the resolved output dir BEFORE the rmSync and abort loudly if it is unsafe.
+const outputErr = outputDirError(SITE_ROOT, config);
+if (outputErr) {
+  log.error(outputErr, { phase: 'build' });
+  log.summary({ pagesBuilt: 0, errors: 1, elapsedMs: Date.now() - buildStart });
+  process.exit(1);
+}
 
 // Clean build directory
 if (fs.existsSync(BUILD_DIR)) {

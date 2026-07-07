@@ -780,6 +780,42 @@ try {
   try { fs.rmSync(dirtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Output-dir guard: the build wipes dirs.output every run, so a mis-set output ("." , ".." , or a
+// source dir like "pages") must FAIL loudly BEFORE the wipe — never delete site source.
+const guardtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwguard-'));
+const guardArg = guardtmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(guardtmp, p)), { recursive: true }); fs.writeFileSync(path.join(guardtmp, p), c); };
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main>precious source</main>');
+  const tryBuild = (out) => {
+    mk('config.json', JSON.stringify({ site: { name: 'G' }, nav: [], dirs: { output: out } }));
+    let exit = 0, err = '';
+    try { execSync(`node cli.js build --site "${guardArg}"`, { cwd: root, stdio: 'pipe' }); }
+    catch (e) { exit = e.status || 1; err = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+    const sourceKept = fs.existsSync(path.join(guardtmp, 'pages', 'index', 'index.json'));
+    return { exit, err, sourceKept };
+  };
+  const asPages = tryBuild('pages');
+  check('output guard: output=source dir fails before wipe, source preserved',
+    asPages.exit !== 0 && /contains pages\//.test(asPages.err) && asPages.sourceKept);
+  const asRoot = tryBuild('.');
+  check('output guard: output=site root fails, source preserved',
+    asRoot.exit !== 0 && /is the site root/.test(asRoot.err) && asRoot.sourceKept);
+  const asUp = tryBuild('..');
+  check('output guard: output escaping the site root fails, source preserved',
+    asUp.exit !== 0 && /outside the site root/.test(asUp.err) && asUp.sourceKept);
+  // A valid relocated output still builds.
+  mk('config.json', JSON.stringify({ site: { name: 'G' }, nav: [], dirs: { output: 'dist' } }));
+  execSync(`node cli.js build --site "${guardArg}"`, { cwd: root, stdio: 'pipe' });
+  check('output guard: a valid non-default output (dist) still builds',
+    fs.existsSync(path.join(guardtmp, 'dist', 'index.html')) &&
+    fs.existsSync(path.join(guardtmp, 'pages', 'index', 'index.json')));
+} finally {
+  try { fs.rmSync(guardtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // `dirs` also covers the test + log folders (the log dir supersedes log.file.dir — one place).
 const tltmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwtl-'));
 const tltmpArg = tltmp.replace(/\\/g, '/');

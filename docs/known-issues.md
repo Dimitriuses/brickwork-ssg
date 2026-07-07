@@ -8,7 +8,7 @@ entries stay as a record, marked ✅ Fixed.
 > most-severe first. Each was verified against the code (and, where marked *reproduced*, against a
 > live fixture build).
 
-## A mis-set `dirs.output` deletes site source — the wipe is unvalidated
+## ✅ A mis-set `dirs.output` deletes site source — the wipe is unvalidated *(fixed)*
 
 **Symptom.** The build wipes `BUILD_DIR` blind (`fs.rmSync(BUILD_DIR, { recursive: true })`,
 build.js ~840) and `lib/dirs.js` does no validation of `dirs.output`. *Reproduced:* a site with
@@ -20,12 +20,15 @@ including `.git`; `".."` the parent folder.
 documented as destructive, but the destructive *target* is user-configurable with zero guarding —
 the sharpest edge in the project.
 
-**Fix (sketch).** Validate the resolved output dir at startup, refuse loud (before the wipe) when it
-(a) equals or contains `SITE_ROOT`, (b) escapes `SITE_ROOT`, or (c) equals/contains any configured
-source dir (`pages`/`components`/`generators`/`assets`, `dirs.database`'s folder, `dirs.admin`) or
-`config.json` itself. Cheap and total: every case is a `path.resolve` prefix check.
+**Fix.** ✅ Done. New `outputDirError(siteRoot, config)` in [lib/dirs.js](../lib/dirs.js): the
+resolved output dir is rejected (a `path.resolve` prefix check) when it **equals the site root**,
+**escapes the site root**, or **contains** any source dir (`pages`/`components`/`generators`/
+`assets`/`test`), the `database` file, the `admin` folder, or `config.json`. `build.js` calls it
+**before** the `rmSync` and aborts loudly (a real error → non-zero exit, FAILED summary) instead of
+wiping. Smoke builds a site with `output` set to `pages` / `.` / `..` and asserts each fails with
+its message *and the source survives*, plus a valid `dist` still builds.
 
-**Status.** Open (data-loss risk — fix first).
+**Status.** ✅ Fixed.
 
 ## `log.error` doesn't fail the build — some errors exit 0 as "completed successfully"
 
