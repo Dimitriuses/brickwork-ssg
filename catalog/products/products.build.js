@@ -11,6 +11,10 @@ function build(vars, loadComponent, replaceVariables, helpers) {
   const { raw, escapeHtml } = helpers;
   const collectionName = vars.COLLECTION || 'products';
   const buttonText = vars.BUTTON_TEXT || 'View Details';
+  // The detail-page link is owned by the template page's generatorOptions.pageName, so make the grid's
+  // link pattern configurable to match it (default keeps `product-<slug>.html`). Set LINK_PATTERN in the
+  // page's component vars to the same pattern the template uses, e.g. "item-{slug}.html".
+  const linkPattern = vars.LINK_PATTERN || 'product-{slug}.html';
 
   // Pagination: number of cards shown per page (configured via page JSON).
   // 0 or unset = pagination disabled (all products on one page).
@@ -80,7 +84,7 @@ function build(vars, loadComponent, replaceVariables, helpers) {
         PRODUCT_NAME: name,
         PRODUCT_DESCRIPTION: data.description || '',
         PRODUCT_PRICE: data.price || 'Price not available',
-        PRODUCT_LINK: `product-${productId}.html`, // Link to the generated detail page
+        PRODUCT_LINK: linkPattern.replace(/\{slug\}/g, productId), // matches the template page's pageName
         BUTTON_TEXT: buttonText
       };
 

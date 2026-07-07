@@ -228,7 +228,7 @@ recursion, `safeRelPath`, the validation rules, and `initialValue`.
 
 **Status.** ✅ Fixed (reorder left as documented future work).
 
-## Products grid hardcodes the detail-page link pattern
+## ✅ Products grid hardcodes the detail-page link pattern *(fixed)*
 
 **Symptom.** `catalog/products/products.build.js` emits `PRODUCT_LINK: \`product-${id}.html\`` —
 but the detail page's name is owned by the *template page*'s `generatorOptions.pageName`. Rename
@@ -239,12 +239,15 @@ pattern in the "content-agnostic" checks).
 **Why it matters.** Two materials are coupled through an implicit string convention with no single
 source of truth — exactly the class of drift the data-model work was meant to end.
 
-**Fix (sketch).** Give the grid a `LINK_PATTERN` var (default `product-{slug}.html`, `{slug}`
-substituted per item) so the page config that knows the pageName can pass the same pattern; extend
-the checks to verify *every* local `href` against `build/` (the `.btn` check already does this
-generally) and drop the `product-` special case.
+**Fix.** ✅ Done. The grid now takes a `LINK_PATTERN` component var (default `product-{slug}.html`),
+substituting `{slug}` per item — so the page config that owns the detail template's `pageName` can
+pass the matching pattern (e.g. `item-{slug}.html`). And `lib/checks.js` dropped the `product-`
+special case: it now verifies **every** local `.html` `href` resolves under `build/` (external /
+anchor / scheme targets skipped), so a grid whose link pattern drifts from its template — or any nav
+typo — is caught by the always-on checks. Smoke unit-tests both the default and overridden pattern,
+and that a dangling local link is flagged.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Carousel component is single-instance-per-page (hardcoded id)
 

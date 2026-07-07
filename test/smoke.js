@@ -1233,4 +1233,44 @@ check('admin UI: generic (drives /api/collections + FieldTypes, no hardcoded pro
 check('admin UI: paths parts allow multi-file select (uploadFiles loop)',
   /input\.multiple\s*=\s*true/.test(appJs) && /async function uploadFiles/.test(appJs));
 
+// Products grid: the detail-page link is a configurable LINK_PATTERN (so it can match a template
+// page's pageName); default stays product-{slug}.html. Unit-test the build script directly with a
+// stub collection + minimal loadComponent/replaceVariables.
+const productsBuild = require('../catalog/products/products.build.js');
+const { raw: rawH, escapeHtml: escH } = require('../lib/html');
+const miniReplace = (tpl, vars) => tpl.replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => {
+  const v = vars[k];
+  if (v == null) return '';
+  return (v && typeof v === 'object' && 'value' in v) ? v.value : String(v);
+});
+const loadPC = (name) => name === 'productCard'
+  ? '<a href="{{PRODUCT_LINK}}" class="btn">{{PRODUCT_NAME}}</a>'
+  : '<div class="grid">{{PRODUCTS_HTML}}</div>';
+const gridHelpers = { raw: rawH, escapeHtml: escH,
+  collection: () => ({ items: [{ id: 'red-brick', item: { data: { name: 'Red', price: '$1' }, images: ['x/a.png'] } }] }),
+  log: { debug() {}, warn() {} } };
+const gridDefault = productsBuild.build({ COLLECTION: 'things' }, loadPC, miniReplace, gridHelpers);
+const gridCustom = productsBuild.build({ COLLECTION: 'things', LINK_PATTERN: 'item-{slug}.html' }, loadPC, miniReplace, gridHelpers);
+check('products grid: default detail link is product-{slug}.html; LINK_PATTERN overrides it',
+  /href="product-red-brick\.html"/.test(gridDefault) && /href="item-red-brick\.html"/.test(gridCustom));
+
+// Engine checks generalized: every local .html link (not just product-*) must resolve; external links
+// are ignored. Build a site with a dangling local link and assert standardChecks flags it.
+const bltmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwlinks-'));
+const blArg = bltmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(bltmp, p)), { recursive: true }); fs.writeFileSync(path.join(bltmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'BL' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [] }));
+  mk('pages/index/index.html', '<main><a href="nowhere.html">dangling</a> <a href="https://x.com/a.html">ext</a></main>');
+  fs.mkdirSync(path.join(bltmp, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${blArg}"`, { cwd: root, stdio: 'pipe' });
+  const linkRes = standardChecks(path.join(bltmp, 'build')).find(r => r.name === 'all local page links resolve');
+  check('engine checks: a dangling local .html link is flagged (external ignored)',
+    !!linkRes && linkRes.ok === false && /nowhere\.html/.test(linkRes.detail || ''));
+} finally {
+  try { fs.rmSync(bltmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 done();
