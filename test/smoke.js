@@ -281,6 +281,16 @@ check('map: a miss resolves to "" and warns',
 // array $images both reach the badge component).
 check('component vars resolve per item (B2)', /class="badge">Alpha \(2\)/.test(mappedAlpha));
 
+// slugify is Unicode-aware: ASCII output is unchanged, but a non-Latin name keeps its letters
+// (\p{L}\p{N}) and produces a distinct id instead of collapsing to the "item" fallback (which made
+// every non-Latin item collide). The fallback fires only for a name with no letters/numbers at all.
+const { slugify: slugifyLib } = require('../lib/slugify');
+check('slugify: ASCII unchanged; non-Latin distinct + readable; punctuation -> item',
+  slugifyLib('Red Brick') === 'red-brick' && slugifyLib('Product 005 (30)') === 'product-005-30' &&
+  slugifyLib('Цегла червона') === 'цегла-червона' &&
+  slugifyLib('Цегла червона') !== slugifyLib('Цегла жовта') &&
+  slugifyLib('Café Noir') === 'café-noir' && slugifyLib('!!!') === 'item' && slugifyLib('') === 'item');
+
 // --- lib/colors.js (terminal UX) ---
 const colors = require('../lib/colors');
 check('colors: disabled palette is identity (byte-identical output when off)',

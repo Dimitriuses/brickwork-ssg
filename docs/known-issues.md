@@ -342,7 +342,7 @@ are never copied. Smoke asserts a dead component's CSS is absent while a used on
 
 **Status.** ✅ Fixed.
 
-## `slugify` collapses non-Latin names to `item` — guaranteed collisions
+## ✅ `slugify` collapses non-Latin names to `item` — guaranteed collisions *(fixed)*
 
 **Symptom.** `lib/slugify.js` keeps only `[a-z0-9]`, so a wholly non-Latin item name (e.g.
 Ukrainian «Цегла червона») slugs to the fallback `item`. Two such items collide: page names crash
@@ -354,11 +354,16 @@ first-party use case) can't produce distinct URLs without adding a per-item `dat
 and the failure reads as a mysterious "page name collision", not "your names transliterate to
 nothing".
 
-**Fix (sketch).** Unicode-aware slugging (lowercase + `\p{L}\p{N}` keep-classes, or a small
-transliteration map), and when the fallback `item` fires, suffix the item folder's hash/index and
-warn with a hint to set `data.slug`.
+**Fix.** ✅ Done. `slugify` now normalizes (`NFKC`), lowercases, and keeps any Unicode letter/number
+(`[^\p{L}\p{N}]+` → `-`, with the `u` flag) instead of only `[a-z0-9]` — so «Цегла червона» →
+`цегла-червона` and «Цегла жовта» → `цегла-жовта` are **distinct, readable** ids (valid in URLs, CSS
+selectors, and filenames). ASCII output is byte-for-byte unchanged (`Product 005 (30)` →
+`product-005-30`), so the example/sites are unaffected. The `item` fallback now fires only for a name
+with **no** letters or numbers at all; a genuine collision there still surfaces as the build's loud
+page-name-collision error and is resolved with a per-item `data.slug`. Smoke covers ASCII stability,
+non-Latin distinctness, accents, and the punctuation-only fallback.
 
-**Status.** Open.
+**Status.** ✅ Fixed (the rare all-punctuation collision stays a loud build error, per design).
 
 ## `contactIcons`: unescaped hrefs, re-reads `config.json`, and depends on an undeployed image
 
