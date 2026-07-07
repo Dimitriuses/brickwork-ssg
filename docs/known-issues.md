@@ -72,7 +72,7 @@ still builds.
 
 **Status.** ✅ Fixed.
 
-## Page-folder assets: nested pages ignored, excluded `_` folders still copied, `_`-strip collides
+## ✅ Page-folder assets: nested pages ignored, excluded `_` folders still copied, `_`-strip collides *(fixed)*
 
 **Symptom.** Three related holes in the page-asset pass (`collectComponentAssets` /
 `copyComponentAssets`):
@@ -88,11 +88,18 @@ still builds.
 **Why it matters.** "Comment out a page with `_`" can silently restyle the live page it shadowed;
 nested pages half-work (HTML yes, assets no) with no message.
 
-**Fix (sketch).** Drive the copy pass from the same recursive scan as page discovery; skip
-`_`-excluded folders (they aren't built); derive asset names from the page's *relative* folder path
-(collision-free) or error on an output-name collision instead of overwriting.
+**Fix.** ✅ Done. Page assets are now named by a `pageAssetName(relFolder)` helper — each source
+folder segment (relative to `PAGES_DIR`) has a cosmetic leading `_` stripped, then joined with `-`
+(`blog/post` → `blog-post`, `_custom-detail` → `custom-detail`) — so nested pages are distinct and
+never collide with a top-level leaf of the same name. A new `copyPageAssets(pageFolders)` is driven
+by the **built-page set** (normal + template folders, computed after classification), not a blind
+`readdir`: an excluded `_`-page's asset never ships (fixing #2 and the #3 overwrite), and nested
+pages are covered (#1). Both `collectComponentAssets` (the link) and `copyPageAssets` (the file) use
+the page's real source folder, so a page whose folder name differs from its `page` value also
+resolves. A genuine output-name collision is now a **loud build error**, not a silent overwrite.
+Smoke covers nested copy+link, the excluded-`_` non-ship, and the collision error.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Placeholder re-substitution — `{{X}}` inside a *value* is expanded (order-dependent)
 

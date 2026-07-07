@@ -802,6 +802,48 @@ try {
   try { fs.rmSync(errtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Page-folder assets: nested pages get their asset copied + linked; an excluded "_"-page's asset is
+// NOT copied (and cannot overwrite a live page's under "_"-stripping); an output-name collision is a
+// loud error instead of a silent overwrite.
+const patmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwpageassets-'));
+const paArg = patmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(patmp, p)), { recursive: true }); fs.writeFileSync(path.join(patmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'PA' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('pages/blog/post/post.json', JSON.stringify({ page: 'post', layout: '_layout', components: [] }));
+  mk('pages/blog/post/post.html', '<main>post</main>');
+  mk('pages/blog/post/style.css', '/* NESTED-POST */');
+  mk('pages/shop/shop.json', JSON.stringify({ page: 'shop', layout: '_layout', components: [] }));
+  mk('pages/shop/shop.html', '<main>shop</main>');
+  mk('pages/shop/style.css', '/* SHOP-REAL */');
+  mk('pages/_shop/style.css', '/* DRAFT-DO-NOT-SHIP */'); // excluded page's asset must not ship
+  fs.mkdirSync(path.join(patmp, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${paArg}"`, { cwd: root, stdio: 'pipe' });
+  const post = fs.readFileSync(path.join(patmp, 'build', 'post.html'), 'utf8');
+  const shopCss = path.join(patmp, 'build', 'assets', 'css', 'pages', 'shop.css');
+  check('page assets: nested page asset copied under folder-path name + linked',
+    /assets\/css\/pages\/blog-post\.css/.test(post) &&
+    fs.readFileSync(path.join(patmp, 'build', 'assets', 'css', 'pages', 'blog-post.css'), 'utf8').includes('NESTED-POST'));
+  check('page assets: excluded "_"-page asset not shipped; live page CSS not overwritten',
+    fs.readFileSync(shopCss, 'utf8').includes('SHOP-REAL') &&
+    !fs.readdirSync(path.join(patmp, 'build', 'assets', 'css', 'pages')).some(f => fs.readFileSync(path.join(patmp, 'build', 'assets', 'css', 'pages', f), 'utf8').includes('DRAFT-DO-NOT-SHIP')));
+  // Two different source folders mapping to the same asset name → loud build error.
+  mk('pages/a-b/a-b.json', JSON.stringify({ page: 'x', layout: '_layout', components: [] }));
+  mk('pages/a-b/a-b.html', '<main>x</main>');
+  mk('pages/a-b/style.css', '/* AB */');
+  mk('pages/a/b/b.json', JSON.stringify({ page: 'y', layout: '_layout', components: [] }));
+  mk('pages/a/b/b.html', '<main>y</main>');
+  mk('pages/a/b/style.css', '/* A/B */');
+  let paExit = 0, paOut = '';
+  try { execSync(`node cli.js build --site "${paArg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { paExit = e.status || 1; paOut = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('page assets: output-name collision fails the build (not a silent overwrite)',
+    paExit !== 0 && /page asset name collision/.test(paOut));
+} finally {
+  try { fs.rmSync(patmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Page-config validation: a normal page config missing a non-empty string `page` used to ship
 // build/undefined.html silently. It now fails the build with the file path; a "_"-prefixed non-page
 // JSON is still just excluded (the escape hatch), and a valid page still builds.

@@ -330,15 +330,22 @@ function buildPage(pageConfig, pageName) {
     }
   });
 
-  // Collect all CSS files (including page-specific). `assetsFrom`, set on generated
-  // pages from a template, links the template page's own asset.
-  const cssFiles = collectComponentCSS(pageData.components || [], pageData.page, pageData.assetsFrom);
+  // The page's own source folder (relative to PAGES_DIR) owns its page-specific style.css/script.js.
+  // A generated page carries `assetsFrom` (its template's relative folder); a normal page uses its
+  // own folder (path.dirname of its config file) — so a NESTED page (pages/blog/post/) and a page
+  // whose folder name differs from its `page` value both resolve their asset correctly.
+  const pageAssetFolder = pageData.assetsFrom != null
+    ? pageData.assetsFrom
+    : (typeof pageConfig === 'string' ? path.relative(PAGES_DIR, path.dirname(pageConfig)) : null);
+
+  // Collect all CSS files (including the page-specific one).
+  const cssFiles = collectComponentCSS(pageData.components || [], pageAssetFolder);
   const cssLinks = cssFiles.map(file =>
     `  <link href="${file}" rel="stylesheet">`
   ).join('\n');
 
-  // Collect all JavaScript files (including page-specific)
-  const jsFiles = collectComponentJS(pageData.components || [], pageData.page, pageData.assetsFrom);
+  // Collect all JavaScript files (including the page-specific one).
+  const jsFiles = collectComponentJS(pageData.components || [], pageAssetFolder);
   const jsScripts = jsFiles.map(file =>
     `  <script src="${file}"></script>`
   ).join('\n');
@@ -506,7 +513,7 @@ function expandTemplatePage(templateFile, templateConfig) {
   const templateDir = path.dirname(templateFile);
   const htmlPath = path.join(templateDir, `${path.basename(templateFile, '.json')}.html`);
   const templateHtml = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf8') : '';
-  const assetsFrom = path.basename(templateDir); // template folder owns the page asset
+  const assetsFrom = path.relative(PAGES_DIR, templateDir); // template folder (relative) owns the page asset
 
   let built = 0;
   descriptors.forEach(descriptor => {
@@ -536,7 +543,16 @@ const ASSET_KINDS = {
   js: { sourceFile: 'script.js', base: ['_layout'] }
 };
 
-function collectComponentAssets(kind, components, pageName, assetBase) {
+// A collision-free output base name for a page's page-specific asset, derived from the page's source
+// folder RELATIVE to PAGES_DIR: each path segment has a cosmetic leading "_" stripped, then joined
+// with "-". So a nested page (pages/blog/post/ -> "blog-post") never collides with a top-level page
+// of the same leaf name, and a "_"-prefixed template folder (_custom-detail -> "custom-detail")
+// keeps its clean name. copyPageAssets + collectComponentAssets both use this, so link and file agree.
+function pageAssetName(relFolder) {
+  return String(relFolder).split(/[\\/]/).map(seg => seg.replace(/^_/, '')).filter(Boolean).join('-');
+}
+
+function collectComponentAssets(kind, components, pageAssetFolder) {
   const { sourceFile, base } = ASSET_KINDS[kind];
   const files = [`assets/${kind}/global.${kind}`];
   const added = new Set();
@@ -559,31 +575,27 @@ function collectComponentAssets(kind, components, pageName, assetBase) {
   base.forEach(addComponent);
   (components || []).forEach(comp => addComponent(comp.name));
 
-  // Page-specific asset: a template-driven generated page links its template page's
-  // own asset (assetBase = the template folder); a normal page links its own folder's
-  // asset. Either is copied from the page folder by copyComponentAssets, which names
-  // the file after the folder with any leading "_" stripped.
-  const assetFolder = assetBase || pageName;
-  if (assetFolder && fs.existsSync(path.join(PAGES_DIR, assetFolder, sourceFile))) {
-    files.push(`assets/${kind}/pages/${assetFolder.replace(/^_/, '')}.${kind}`);
+  // Page-specific asset: linked from the page's own source folder (relative to PAGES_DIR — supports
+  // nested pages), under the collision-free name copyPageAssets writes it to.
+  if (pageAssetFolder && fs.existsSync(path.join(PAGES_DIR, pageAssetFolder, sourceFile))) {
+    files.push(`assets/${kind}/pages/${pageAssetName(pageAssetFolder)}.${kind}`);
   }
 
   return files;
 }
 
-const collectComponentCSS = (components, pageName, assetBase) => collectComponentAssets('css', components, pageName, assetBase);
-const collectComponentJS = (components, pageName, assetBase) => collectComponentAssets('js', components, pageName, assetBase);
+const collectComponentCSS = (components, pageAssetFolder) => collectComponentAssets('css', components, pageAssetFolder);
+const collectComponentJS = (components, pageAssetFolder) => collectComponentAssets('js', components, pageAssetFolder);
 
-// Copy assets of one kind ('css' or 'js') into build/: the global file, every
-// component's asset, and each page folder's asset (named after the folder, leading
-// "_" stripped). Template-driven pages link their template folder's asset from here.
+// Copy the global + component assets of one kind ('css' or 'js') into build/. Page-specific assets
+// are handled separately by copyPageAssets (driven by the built-page set, so excluded/nested pages
+// are correct). Component assets: engine + site (site overrides win, registry-relocated too), plus
+// each component's declared sub-components (which may carry their own nested assets).
 function copyComponentAssets(kind) {
   const { sourceFile } = ASSET_KINDS[kind];
   const buildAssetDir = path.join(BUILD_DIR, 'assets', kind);
-  const buildPagesAssetDir = path.join(buildAssetDir, 'pages');
 
   if (!fs.existsSync(buildAssetDir)) fs.mkdirSync(buildAssetDir, { recursive: true });
-  if (!fs.existsSync(buildPagesAssetDir)) fs.mkdirSync(buildPagesAssetDir, { recursive: true });
 
   // Global asset
   const globalAsset = path.join(ASSETS_DIR, kind, `global.${kind}`);
@@ -605,16 +617,32 @@ function copyComponentAssets(kind) {
       }
     });
   });
+}
 
-  // Site page-specific assets (top-level page folders only)
-  fs.readdirSync(PAGES_DIR, { withFileTypes: true }).forEach(entry => {
-    if (!entry.isDirectory()) return;
-    const pageAssetFile = path.join(PAGES_DIR, entry.name, sourceFile);
-    if (fs.existsSync(pageAssetFile)) {
-      const fileName = entry.name.replace(/^_/, '') + `.${kind}`;
-      fs.copyFileSync(pageAssetFile, path.join(buildPagesAssetDir, fileName));
+// Copy the page-specific style.css/script.js for the set of BUILT page source folders (normal +
+// template pages, relative to PAGES_DIR). Driven by the built set — not a blind readdir — so an
+// excluded "_"-page's asset never ships (and never overwrites a live page's), and nested pages are
+// covered. An output-name collision is a loud build error rather than a silent overwrite.
+function copyPageAssets(pageFolders) {
+  for (const kind of ['css', 'js']) {
+    const { sourceFile } = ASSET_KINDS[kind];
+    const buildPagesAssetDir = path.join(BUILD_DIR, 'assets', kind, 'pages');
+    fs.mkdirSync(buildPagesAssetDir, { recursive: true });
+    const writtenBy = new Map(); // asset name -> source folder that produced it (collision guard)
+    for (const relFolder of pageFolders) {
+      const src = path.join(PAGES_DIR, relFolder, sourceFile);
+      if (!fs.existsSync(src)) continue;
+      const name = pageAssetName(relFolder);
+      const prev = writtenBy.get(name);
+      if (prev && prev !== relFolder) {
+        log.error(`page asset name collision: "${relFolder}/${sourceFile}" and "${prev}/${sourceFile}" both map to assets/${kind}/pages/${name}.${kind}`, { phase: 'assets' });
+        buildErrors++;
+        continue;
+      }
+      writtenBy.set(name, relFolder);
+      fs.copyFileSync(src, path.join(buildPagesAssetDir, `${name}.${kind}`));
     }
-  });
+  }
 }
 
 const copyComponentCSS = () => copyComponentAssets('css');
@@ -933,6 +961,13 @@ for (const pageFile of pageFiles) {
 }
 
 log.info(`[PAGES] Found ${normalPageFiles.length} page(s) + ${templatePages.length} template(s)\n`, { phase: 'pages' });
+
+// Copy page-specific assets for the BUILT page folders only (normal + template pages), so an
+// excluded "_"-page's style.css/script.js never ships and nested-page assets are covered.
+const pageAssetFolders = new Set();
+normalPageFiles.forEach(f => pageAssetFolders.add(path.relative(PAGES_DIR, path.dirname(f))));
+templatePages.forEach(({ file }) => pageAssetFolders.add(path.relative(PAGES_DIR, path.dirname(file))));
+copyPageAssets(pageAssetFolders);
 
 let pagesBuilt = 0;
 normalPageFiles.forEach(pageFile => {
