@@ -14,8 +14,9 @@ const { siteDirs, outputDirError } = require('./lib/dirs');
 const ENGINE_ROOT = __dirname;
 const SITE_ROOT = process.cwd();
 
-// Engine-relative (shared across all sites)
-const COMPONENTS_DIR = path.join(ENGINE_ROOT, 'components');
+// Engine-relative (shared across all sites). The engine ships no default components/ under a slim
+// core — a site owns what it uses (deployable materials live in catalog/) — so only generators/ is
+// engine-resolved here.
 const GENERATORS_DIR = path.join(ENGINE_ROOT, 'generators');
 
 // config.json is fixed at the site root (it bootstraps the layout below).
@@ -127,11 +128,10 @@ const {
 function loadComponent(componentName) {
   let file = resolveComponentFile(componentName, `${componentName}.html`);
   if (!file) {
-    // Flat form (e.g. a component placed directly at <components>/<name>.html).
-    for (const dir of [SITE_COMPONENTS_DIR, path.join(ENGINE_ROOT, 'components')]) {
-      const flat = path.join(dir, `${componentName}.html`);
-      if (fs.existsSync(flat)) { file = flat; break; }
-    }
+    // Flat form (e.g. a component placed directly at <site components>/<name>.html). The engine ships
+    // no components/ (slim core), so only the site dir is probed.
+    const flat = path.join(SITE_COMPONENTS_DIR, `${componentName}.html`);
+    if (fs.existsSync(flat)) file = flat;
   }
   if (file) return fs.readFileSync(file, 'utf8');
   // Slim core: the engine ships no default components — a site owns what it uses. A miss is almost

@@ -4,7 +4,7 @@ A tiny, zero-config **static-site generator**. Build pages from reusable HTML
 components and content collections — no framework, no client runtime, and zero
 runtime dependencies for the build itself.
 
-> Status: **v0.4.0**. One engine builds many sites; a site embeds this engine
+> Status: **v0.7.0**. One engine builds many sites; a site embeds this engine
 > as a **git submodule** and runs it.
 
 > **Provenance:** this repository was extracted from a larger private project and
@@ -97,8 +97,8 @@ your site's copy; if none is installed it offers to launch the engine's bundled 
 **Pin & update the engine** by checking out a release tag inside the submodule:
 
 ```bash
-git -C engine fetch --tags && git -C engine checkout v0.4.0
-git add engine && git commit -m "engine v0.4.0"
+git -C engine fetch --tags && git -C engine checkout v0.7.0
+git add engine && git commit -m "engine v0.7.0"
 ```
 
 Clone a site with its engine in one step: `git clone --recurse-submodules <site-url>`.

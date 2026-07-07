@@ -532,12 +532,13 @@ try {
   // page: stubs incl. the .json schema; --layout overrides the default _layout.
   const pout = execSync(`node cli.js add page about --layout=marketing --site "${stmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
   const pjson = JSON.parse(fs.readFileSync(path.join(stmp, 'pages', 'about', 'about.json'), 'utf8'));
-  check('scaffold page: html/json/style/script + --layout applied',
+  check('scaffold page: html/json/style/script + --layout applied (grouped layout form, no dead header_theme)',
     /created 4 file\(s\) for page "about"/.test(pout) &&
     fs.existsSync(path.join(stmp, 'pages', 'about', 'about.html')) &&
     fs.existsSync(path.join(stmp, 'pages', 'about', 'style.css')) &&
     fs.existsSync(path.join(stmp, 'pages', 'about', 'script.js')) &&
-    pjson.page === 'about' && pjson.layout === 'marketing' && Array.isArray(pjson.components));
+    pjson.page === 'about' && pjson.layout && pjson.layout.name === 'marketing' &&
+    !('header_theme' in pjson) && Array.isArray(pjson.components));
 
   // never clobber without --force; --force overwrites.
   fs.writeFileSync(path.join(stmp, 'pages', 'about', 'about.html'), 'MINE');

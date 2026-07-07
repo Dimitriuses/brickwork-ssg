@@ -38,6 +38,18 @@ Components resolve **site-first, then engine**, **per file** (`resolveComponentF
 
 > **Slim core (Phase 2, `feat/slim-core`).** The engine's default components now live in **`catalog/`**, not `components/`, and **the build no longer resolves engine defaults** — a site **owns what it uses** and adopts catalog materials with `ssg add material <name>` (or `--all-used`). So file references below that say `components/<x>` are now **`catalog/<x>`** in the engine (a site still uses its own `components/`). An unowned material fails the build with `is not installed — run ssg add material <name>`. This CLAUDE.md predates the move and still says `components/` in places — read those as `catalog/` for engine-shipped materials; a full pass is pending (see docs/slim-core-plan.md).
 
+> **v0.7 audit fixes (see docs/known-issues.md).** Behavior a maintainer should know: the build
+> **validates `dirs.output`** and refuses to wipe a dir that is/contains the site or a source dir;
+> the exit code keys off the logger's error tally (any `log.error` fails the build); a normal page
+> config **must carry a non-empty string `page`**; `replaceVariables` is **single-pass** (a `{{X}}`
+> inside a value is left literal); a **declared** component gets `{ ...flatConfig, ...comp.vars }` (same
+> scope as inline / layout-dependency); component assets ship **only where used**; page-specific assets
+> are named by relative folder path (nested-page-safe, collision = error); `flattenConfig` keeps
+> top-level config **objects** whole (e.g. `SOCIAL`) alongside the scalars; `slugify` keeps Unicode
+> letters/numbers; the products grid takes a **`LINK_PATTERN`** var and the carousel a **`CAROUSEL_ID`**;
+> `ssg test` honors `dirs.output`. The admin gained Host/Origin (CSRF/DNS-rebinding) defense + part-scoped
+> file routes, recursive part matching, and `default`/`validation`/field-`hide` schema features.
+
 ### Build pipeline (order matters)
 
 1. Load `config.json` and `shared/database.json` (under `SITE_ROOT`).
@@ -56,8 +68,12 @@ Non-obvious constraints:
 
 A component is a folder. Recognized files:
 - `<name>.html` — template with `{{VAR}}` and `{{COMPONENT:other}}` placeholders.
-- `style.css` / `script.js` — auto-copied and auto-linked only on pages that use the component.
-- `<name>.json` — optional; `{ "dependencies": [...], "subComponents": [...] }`.
+- `style.css` / `script.js` — auto-copied and auto-linked only on pages that use the component
+  (the copy is now **driven by the used-component set**, so a component no page references never
+  ships its assets; a component named `global` is refused to protect the site `global.*`).
+- `<name>.json` — optional; `{ "dependencies": [...], "subComponents": [...], "head": [...] }`.
+  **`head`** is an array of raw `<head>` HTML strings (font links, preloads) injected via the
+  layout's `{{HEAD_LINKS}}` **only on pages that use the component** (e.g. the hero's fonts).
 - `<name>.build.js` — optional custom logic; **its presence overrides** plain template rendering.
 
 **Build script contract:** `module.exports = { build }` where

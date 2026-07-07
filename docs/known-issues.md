@@ -417,7 +417,7 @@ just doesn't receive component head resources).
 
 **Status.** ✅ Fixed.
 
-## Version & scaffold drift: package.json says 0.4.0, stubs emit removed fields, stale paths
+## ✅ Version & scaffold drift: package.json says 0.4.0, stubs emit removed fields, stale paths *(fixed)*
 
 **Symptom.** A bundle of drift a release pass should sweep:
 - `package.json` `version` is **0.4.0** and the README opens "Status: **v0.4.0**" (pin example
@@ -436,11 +436,17 @@ just doesn't receive component head resources).
 **Why it matters.** Individually small; together they make the project's self-description
 unreliable at exactly the places (version, scaffolds, first-run files) newcomers meet first.
 
-**Fix (sketch).** One housekeeping commit: bump version to the real tag, fix `files`, update the
-page stub to `layout: { name, vars }`, route the generators warning through `lib/log`, delete the
-dead engine-components probes, and do the pending CLAUDE.md pass.
+**Fix.** ✅ Done. `package.json` → **`version: 0.7.0`** and `files` drops the phantom `components/`;
+the README status line + the submodule-pin example → **v0.7.0**. The `ssg add page` stub drops the
+removed top-level `header_theme` and emits the grouped **`layout: { name, vars }`** form; the
+`builder` stub comment lists the full helpers (`… raw, collection, log`). `build.js` deletes the dead
+`COMPONENTS_DIR` and the nonexistent-engine-`components/` flat-form probe; `lib/generators.js` routes
+its parse warning through **`lib/log`** (so `--quiet`/the file sink apply). CLAUDE.md gained a **v0.7
+audit note** documenting the new engine behaviors + the `head` component file (a full architectural
+`components/`→`catalog/` rewrite of the older prose remains its own documentation task, still flagged
+in the doc). Smoke asserts the page stub is the grouped form with no `header_theme`.
 
-**Status.** Open.
+**Status.** ✅ Fixed (concrete drift swept; the broader CLAUDE.md prose rewrite stays a separate docs task).
 
 ## Hot-path caching: component configs and files re-resolved per page × component
 
