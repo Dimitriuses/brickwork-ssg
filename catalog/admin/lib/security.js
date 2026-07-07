@@ -35,4 +35,18 @@ function crossOriginBlocked(method, originHeader, hostHeader) {
   return !(LOCAL_HOSTS.has(originHost) || originHost === hostname(hostHeader));
 }
 
-module.exports = { hostAllowed, crossOriginBlocked, hostname, LOCAL_HOSTS, STATE_CHANGING };
+// Validate an item-relative file path that MAY contain "/" subdirs (parts can match nested files, e.g.
+// `gallery/*.jpg`). Returns the normalized posix relative path, or null if unsafe: it must be relative
+// (no leading slash / drive) and every segment must be non-empty and not ".", "..", a backslash, or a
+// NUL. resolveWithin() still asserts final containment — this is defense in depth for the file routes.
+function safeRelPath(s) {
+  const str = String(s == null ? '' : s);
+  if (!str || str.startsWith('/') || str.startsWith('\\') || /^[a-zA-Z]:/.test(str)) return null;
+  const segs = str.split('/');
+  for (const seg of segs) {
+    if (!seg || seg === '.' || seg === '..' || seg.includes('\\') || seg.includes('\0')) return null;
+  }
+  return segs.join('/');
+}
+
+module.exports = { hostAllowed, crossOriginBlocked, safeRelPath, hostname, LOCAL_HOSTS, STATE_CHANGING };

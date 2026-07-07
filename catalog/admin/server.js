@@ -81,7 +81,6 @@ function publicPartConfig(collName, partName) {
   if (cfg.max_count != null) out.max_count = cfg.max_count;
   if (cfg.max_size_mb != null) out.max_size_mb = cfg.max_size_mb;
   if (Array.isArray(cfg.accept)) out.accept = cfg.accept;
-  if (cfg.orderable != null) out.orderable = cfg.orderable;
   return out;
 }
 function fileEntry(c, id, filename) { return { name: filename, url: `/files/${encodeURIComponent(c.name)}/${encodeURIComponent(id)}/${encodeURIComponent(filename)}` }; }
@@ -135,13 +134,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve an item's source files (for image previews etc.) straight from the collection source. Scoped
-// to a servable (non-`object`) part, so the data file (e.g. product.json) is never served here.
+// to a servable (non-`object`) part, so the data file (e.g. product.json) is never served here. The
+// filename may be a nested relative path (parts can match nested files) — validated segment-by-segment.
 app.get('/files/:collection/:id/:filename', (req, res) => {
   try {
     const c = getCollection(req.params.collection);
-    const filename = safeSeg(req.params.filename, 'filename');
+    const filename = security.safeRelPath(req.params.filename);
+    if (!filename) throw badRequest('Invalid filename');
     if (!model.filePart(model.modelParts(c), filename)) return res.status(404).end();
-    const filePath = resolveWithin(itemDirOf(c, req.params.id), filename);
+    const filePath = resolveWithin(itemDirOf(c, req.params.id), ...filename.split('/'));
     if (!fs.existsSync(filePath)) return res.status(404).end();
     res.sendFile(filePath);
   } catch (e) { res.status(e.status || 400).end(); }
@@ -202,7 +203,11 @@ app.post('/api/collections/:collection/items', (req, res) => {
         const errs = objectPartErrors(p, seed[p.name]);
         if (errs.length) { fs.rmSync(itemDir, { recursive: true, force: true }); return res.status(400).json({ error: `Validation failed for "${p.name}"`, errors: errs }); }
         const fn = model.objectFileName(itemDir, p);
-        if (fn) fs.writeFileSync(path.join(itemDir, fn), JSON.stringify(seed[p.name], null, 2));
+        if (fn) {
+          const target = path.join(itemDir, fn);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.writeFileSync(target, JSON.stringify(seed[p.name], null, 2));
+        }
       }
     }
     res.json({ success: true, id });
@@ -221,7 +226,9 @@ app.put('/api/collections/:collection/items/:id/parts/:part', (req, res) => {
     if (errs.length) return res.status(400).json({ error: 'Validation failed', errors: errs });
     const fn = model.objectFileName(itemDir, part);
     if (!fn) return res.status(400).json({ error: `Cannot determine a filename for object part "${part.name}" (match "${part.match}" is a glob)` });
-    fs.writeFileSync(path.join(itemDir, fn), JSON.stringify(req.body || {}, null, 2));
+    const target = path.join(itemDir, fn);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, JSON.stringify(req.body || {}, null, 2));
     res.json({ success: true });
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
@@ -287,9 +294,10 @@ app.delete('/api/collections/:collection/items/:id/parts/:part/files/:filename',
     // Scope the delete to THIS part: never remove an object/data file through a file manager, and only
     // a filename that belongs to the part's glob (so DELETE .../parts/images/files/product.json fails).
     if (part.type === 'object') return res.status(400).json({ error: `Part "${part.name}" does not hold files` });
-    const filename = safeSeg(req.params.filename, 'filename');
+    const filename = security.safeRelPath(req.params.filename);
+    if (!filename) throw badRequest('Invalid filename');
     if (!part.regex.test(filename)) return res.status(400).json({ error: `File "${filename}" does not belong to part "${part.name}" (${part.match})` });
-    const filePath = resolveWithin(itemDirOf(c, req.params.id), filename);
+    const filePath = resolveWithin(itemDirOf(c, req.params.id), ...filename.split('/'));
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
     fs.unlinkSync(filePath);
     res.json({ success: true });

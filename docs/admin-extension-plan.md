@@ -219,8 +219,12 @@ own settings.
   register one entry).
 - **Admin config home:** the `config.json` `admin` block, but the admin loads **`<dirs.admin>/admin.json`
   first if present** (the isolated-project seam; per-folder configs also serve backup/test admins).
-- **`paths`/`file_path` upload limits** (count/size/accept/ordering) live in the **admin config**
-  (`collections.<name>.<part>`), not `data_model`.
+- **`paths`/`file_path` upload limits** (count/size/accept) live in the **admin config**
+  (`collections.<name>.<part>`), not `data_model`. *(Update, 2026-07 audit: the `orderable` knob was
+  removed — no reorder endpoint/UI ever shipped. File order is filename order (the build's primary
+  image is the first sorted file). A real reorder — rename-based, or a `data.primary` field — is
+  future work; `default`/`validation`(min/max/pattern)/field-level `hide` and recursive part matching
+  are now implemented — see known-issues.md.)*
 - **`ssg add admin` re-run:** whole-folder — existing folder → prompt **overwrite**; new folder → copy +
   **repoint `dirs.admin`** (previous stays as a backup / test admin).
 - **Config singletons:** **deferred to the CMS** (confirmed).

@@ -1158,6 +1158,39 @@ check('admin security: crossOriginBlocked refuses cross-site writes, allows GET/
   adminSec.crossOriginBlocked('GET', 'http://evil.com', '127.0.0.1:3000') === false &&
   adminSec.crossOriginBlocked('POST', 'http://127.0.0.1:3000', '127.0.0.1:3000') === false &&
   adminSec.crossOriginBlocked('POST', undefined, '127.0.0.1:3000') === false);
+check('admin security: safeRelPath allows nested paths, blocks traversal/absolute/backslash',
+  adminSec.safeRelPath('gallery/1.jpg') === 'gallery/1.jpg' && adminSec.safeRelPath('../secret') === null &&
+  adminSec.safeRelPath('/etc/passwd') === null && adminSec.safeRelPath('a' + String.fromCharCode(92) + 'b') === null);
+
+// Admin/engine parity: listFiles is RECURSIVE with relative paths (mirrors the engine), so a nested
+// part glob (gallery/*.jpg) matches the same files the build would, while a plain *.png stays root-only.
+const parmtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwparity-'));
+try {
+  fs.writeFileSync(path.join(parmtmp, '1.png'), 'x');
+  fs.mkdirSync(path.join(parmtmp, 'gallery'));
+  fs.writeFileSync(path.join(parmtmp, 'gallery', 'g1.jpg'), 'x');
+  const lf = adminModel.listFiles(parmtmp);
+  const parts = adminModel.modelParts({ data_model: {
+    gal: { match: 'gallery/*.jpg', type: 'paths' }, root: { match: '*.png', type: 'paths' } } });
+  check('admin parity: recursive listFiles + nested glob matches (root glob stays root-only)',
+    lf.includes('gallery/g1.jpg') && lf.includes('1.png') &&
+    adminModel.partFiles(parmtmp, parts[0]).includes('gallery/g1.jpg') &&
+    !adminModel.partFiles(parmtmp, parts[1]).includes('gallery/g1.jpg'));
+} finally {
+  try { fs.rmSync(parmtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+// Field-type registry: `default` seeds a missing value; number min/max + string pattern validation.
+const ftReg = require('../catalog/admin/public/fieldTypes');
+check('fieldTypes: initialValue applies default only when the value is missing',
+  ftReg.initialValue({ default: 'D' }, undefined) === 'D' && ftReg.initialValue({ default: 'D' }, '') === '' &&
+  ftReg.initialValue({ default: 'D' }, 'stored') === 'stored');
+check('fieldTypes: number min/max + string pattern/length validation',
+  ftReg.types.number.validate(3, { min: 5 }) === 'must be at least 5' &&
+  ftReg.types.number.validate(9, { max: 5 }) === 'must be at most 5' &&
+  ftReg.types.number.validate(4, { min: 1, max: 5 }) === null &&
+  ftReg.types.string.validate('abc', { pattern: '^[0-9]+$' }) === 'does not match the required format' &&
+  ftReg.types.string.validate('123', { pattern: '^[0-9]+$' }) === null &&
+  ftReg.types.string.validate('toolong', { maxLength: 3 }) !== null);
 
 // Phase 3.2 (field-type registry): fieldTypes drives object-part forms + server-side schema validation.
 // Isomorphic (require in Node / <script> in the browser); smoke unit-tests the pure registry.

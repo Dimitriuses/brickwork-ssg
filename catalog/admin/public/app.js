@@ -137,13 +137,16 @@ function renderPart(p, value, itemId) {
 function renderObjectForm(p, obj) {
   const form = el('form', { class: 'obj-form', 'data-part': p.name });
   form.onsubmit = (e) => e.preventDefault();
+  form._loaded = obj || {}; // keep the stored value so hidden fields survive a save
   const schema = p.schema && Object.keys(p.schema).length ? p.schema : null;
   if (schema) {
     for (const [name, field] of Object.entries(schema)) {
+      if (field && field.hide) continue; // declared but not shown (its stored value is preserved on save)
       const t = FT.typeOf(field);
       const f = el('div', { class: 'field' });
       f.innerHTML = `<label>${esc(field.label || name)}${field.required ? ' <span class="req">*</span>' : ''}</label>`;
-      f.insertAdjacentHTML('beforeend', t.input(name, t.serialize(obj[name]), field));
+      // Seed with the stored value, or the field's `default` when there is none (new item / added field).
+      f.insertAdjacentHTML('beforeend', t.input(name, t.serialize(FT.initialValue(field, obj[name])), field));
       form.appendChild(f);
     }
   } else {
@@ -163,7 +166,12 @@ function readObjectForm(form, part) {
     try { return JSON.parse(raw); } catch (e) { throw new Error(`${part.name}: invalid JSON — ${e.message}`); }
   }
   const obj = {};
+  const loaded = form._loaded || {};
   for (const [name, field] of Object.entries(part.schema)) {
+    if (field && field.hide) { // not rendered — carry its stored value through unchanged
+      if (name in loaded) obj[name] = loaded[name];
+      continue;
+    }
     const t = FT.typeOf(field);
     const input = form.querySelector(`[name="${name.replace(/"/g, '\\"')}"]`);
     const rawVal = input ? (input.type === 'checkbox' ? input.checked : input.value) : '';

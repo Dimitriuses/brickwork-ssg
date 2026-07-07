@@ -37,10 +37,19 @@ function readJsonSafe(p) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return null; }
 }
 
-// Immediate file names in a dir (sorted); [] if the dir is absent.
-function listFiles(dir) {
+// File names in a dir, RECURSIVELY, as "/"-joined paths relative to it (sorted); [] if absent. Mirrors
+// the engine's listFilesRelative so admin part-matching agrees with the build (a `gallery/*.jpg` or
+// `**/*.png` part matches the same files in both). A plain `*.jpg` still matches only root files
+// (`[^/]*` never crosses "/"), so simple parts are unchanged.
+function listFiles(dir, rel = '') {
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name).sort();
+  const out = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const relPath = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) out.push(...listFiles(path.join(dir, e.name), relPath));
+    else if (e.isFile()) out.push(relPath);
+  }
+  return out.sort();
 }
 
 // A collection's data_model as a normalized part list: [{ name, type, match, regex, required, schema }].

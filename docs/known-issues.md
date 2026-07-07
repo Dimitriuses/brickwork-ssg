@@ -191,7 +191,7 @@ predicates.
 
 **Status.** ✅ Fixed.
 
-## Admin ↔ engine data-model parity gaps (nested matches, schema features, image order)
+## ✅ Admin ↔ engine data-model parity gaps (nested matches, schema features, image order) *(fixed)*
 
 **Symptom.** The admin re-implements item resolution and drifts from the engine in ways the docs
 don't admit:
@@ -212,12 +212,21 @@ don't admit:
 the build's semantics undermines it, and the unimplemented-but-documented knobs cost users real
 debugging time.
 
-**Fix (sketch).** Make `partFiles` recursive with relative paths (mirror `listFilesRelative`);
-either implement `default`/`validation`/field-`hide` in the field-type registry or strike them from
-the plan's Decided list; give `paths` parts a rename-based reorder (or a `data.primary` convention)
-and delete `orderable` until it does something.
+**Fix.** ✅ Done, in three parts. **Recursive parity:** the admin's `model.listFiles` is now recursive
+with relative posix paths (mirrors the engine's `listFilesRelative`), so `partFiles`/`filePart`/
+`readItemParts` match a `gallery/*.jpg` part the same way the build does; the file `GET`/`DELETE`
+routes accept a safe relative subpath (new `security.safeRelPath`, resolved segment-by-segment inside
+`resolveWithin`), and object writes `mkdir -p` their target. (A plain `*.png` still stays root-only —
+`[^/]*` never crosses `/` — so simple parts are unchanged; uploads to a nested part fail cleanly via
+the filename filter, a documented limitation.) **Schema features implemented:** `default` (seeds a
+missing form value, via `FT.initialValue`), per-field `validation` — number `min`/`max`, string/text
+`minLength`/`maxLength`/`pattern` — in the field-type registry (validated server-side too), and
+field-level `hide: true` (not rendered, its stored value preserved on save). **Dead knob removed:**
+`orderable` is dropped from the server's `publicPartConfig` and struck from the admin plan; a real
+reorder (rename-based or a `data.primary` convention) is noted there as future work. Smoke unit-tests
+recursion, `safeRelPath`, the validation rules, and `initialValue`.
 
-**Status.** Open.
+**Status.** ✅ Fixed (reorder left as documented future work).
 
 ## Products grid hardcodes the detail-page link pattern
 

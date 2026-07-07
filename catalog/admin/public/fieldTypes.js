@@ -25,20 +25,47 @@
     ? { value: o.value, label: o.label != null ? o.label : o.value }
     : { value: o, label: o });
 
+  // Optional per-field validation shared across types (all no-ops unless the field declares them):
+  //   number: min / max ;  string+text: minLength / maxLength / pattern (a RegExp source string).
+  function rangeError(v, f) {
+    const n = Number(v);
+    if (f.min != null && n < Number(f.min)) return `must be at least ${f.min}`;
+    if (f.max != null && n > Number(f.max)) return `must be at most ${f.max}`;
+    return null;
+  }
+  function textError(v, f) {
+    const s = String(v);
+    if (f.minLength != null && s.length < f.minLength) return `must be at least ${f.minLength} character(s)`;
+    if (f.maxLength != null && s.length > f.maxLength) return `must be at most ${f.maxLength} character(s)`;
+    if (f.pattern) {
+      let re = null; try { re = new RegExp(f.pattern); } catch (e) { re = null; }
+      if (re && !re.test(s)) return 'does not match the required format';
+    }
+    return null;
+  }
+
   const types = {
     string: {
       label: 'Text',
       input: (n, v, f) => `<input type="text" name="${esc(n)}" value="${esc(v)}"${f && f.required ? ' required' : ''}>`,
       parse: r => r == null ? '' : String(r),
       serialize: v => v == null ? '' : String(v),
-      validate: (v, f) => (f && f.required && isBlank(v)) ? 'is required' : null
+      validate: (v, f) => {
+        f = f || {};
+        if (isBlank(v)) return f.required ? 'is required' : null;
+        return textError(v, f);
+      }
     },
     text: {
       label: 'Multiline text',
       input: (n, v, f) => `<textarea name="${esc(n)}" rows="4"${f && f.required ? ' required' : ''}>${esc(v)}</textarea>`,
       parse: r => r == null ? '' : String(r),
       serialize: v => v == null ? '' : String(v),
-      validate: (v, f) => (f && f.required && isBlank(v)) ? 'is required' : null
+      validate: (v, f) => {
+        f = f || {};
+        if (isBlank(v)) return f.required ? 'is required' : null;
+        return textError(v, f);
+      }
     },
     number: {
       label: 'Number',
@@ -46,8 +73,10 @@
       parse: r => isBlank(r) ? null : Number(r),
       serialize: v => v == null ? '' : String(v),
       validate: (v, f) => {
-        if (isBlank(v)) return (f && f.required) ? 'is required' : null;
-        return Number.isNaN(Number(v)) ? 'must be a number' : null;
+        f = f || {};
+        if (isBlank(v)) return f.required ? 'is required' : null;
+        if (Number.isNaN(Number(v))) return 'must be a number';
+        return rangeError(v, f);
       }
     },
     boolean: {
@@ -87,6 +116,12 @@
   // A field's type object, defaulting unknown/blank types to `string`.
   function typeOf(field) { return types[(field && field.type)] || types.string; }
 
+  // The value to seed a form control with: the stored value, or the field's `default` when there is no
+  // stored value (a new item / an added field). Lets a schema declare `"default": …`.
+  function initialValue(field, value) {
+    return (value === undefined || value === null) && field && field.default !== undefined ? field.default : value;
+  }
+
   // Validate an object against a schema map. Returns an array of human messages ([] when valid).
   function validateObject(obj, schema) {
     const errors = [];
@@ -98,5 +133,5 @@
     return errors;
   }
 
-  return { types, typeOf, validateObject, esc };
+  return { types, typeOf, initialValue, validateObject, esc };
 });
