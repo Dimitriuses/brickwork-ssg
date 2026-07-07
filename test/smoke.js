@@ -752,6 +752,28 @@ try {
   try { fs.rmSync(btmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// replaceVariables is single-pass: a placeholder appearing inside a VALUE is left literal (not
+// re-substituted by a later var), regardless of key order. Guards the data→template injection channel
+// (untrusted text like "{{JS_SCRIPTS}}" cannot pull build internals into the page).
+const sptmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwsinglepass-'));
+const spArg = sptmp.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(sptmp, p)), { recursive: true }); fs.writeFileSync(path.join(sptmp, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'SP' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('components/badge/badge.html', '<div class="badge">A=[{{AAA}}] Z=[{{ZZZ}}]</div>');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', title: 'T', layout: '_layout',
+    components: [{ name: 'badge', vars: { AAA: 'user typed {{ZZZ}} here', ZZZ: 'SECRET' } }] }));
+  mk('pages/index/index.html', '<main>{{COMPONENT:badge}}</main>');
+  fs.mkdirSync(path.join(sptmp, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${spArg}"`, { cwd: root, stdio: 'pipe' });
+  const out = fs.readFileSync(path.join(sptmp, 'build', 'index.html'), 'utf8');
+  check('replaceVariables single-pass: a {{placeholder}} inside a value stays literal',
+    /A=\[user typed \{\{ZZZ\}\} here\]/.test(out) && /Z=\[SECRET\]/.test(out));
+} finally {
+  try { fs.rmSync(sptmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Configurable dirs: a config.json `dirs` block relocates pages/components/generators/assets + the
 // output dir (defaults keep today's layout). Build a src/ + shared/assets + dist/ site.
 const dirtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwdirs-'));

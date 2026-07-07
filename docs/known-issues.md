@@ -101,7 +101,7 @@ Smoke covers nested copy+link, the excluded-`_` non-ship, and the collision erro
 
 **Status.** ✅ Fixed.
 
-## Placeholder re-substitution — `{{X}}` inside a *value* is expanded (order-dependent)
+## ✅ Placeholder re-substitution — `{{X}}` inside a *value* is expanded (order-dependent) *(fixed)*
 
 **Symptom.** `replaceVariables` loops over vars and re-scans the whole accumulated result for each
 key, so a **value** containing placeholder-looking text is substituted by any var processed later.
@@ -115,11 +115,14 @@ injected. HTML-escaping doesn't help: `{{…}}` survives it.
 pull build internals into the page) and makes rendering depend on object key order — a classic
 latent heisenbug.
 
-**Fix (sketch).** Single-pass replacement: build one `\{\{(k1|k2|…)\}\}` regex over the *template
-only* with a callback lookup (longest-key-first or exact-name match). Values are then never
-re-scanned. Semantics stay identical for every legitimate template.
+**Fix.** ✅ Done. `replaceVariables` now builds one regex — `\{\{(k1|k2|…)\}\}`, keys regex-escaped
+and longest-first — and does a **single `template.replace`** with a callback lookup, so only the
+template's own placeholders are filled and inserted values are never re-scanned. Arrays still stay
+literal (build scripts expand them); the callback form keeps `$`-sequences literal. Semantics are
+unchanged for every legitimate template. Smoke asserts a `{{ZZZ}}` inside `AAA`'s value renders
+literally while `ZZZ` itself still resolves.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## A component's vars depend on *how* it was placed — three different scopes
 

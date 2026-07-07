@@ -155,22 +155,29 @@ function normalizeWebPaths(html) {
 // (from lib/html) to insert pre-built HTML verbatim. A function replacer is
 // used so values containing $ sequences (e.g. "$&", "$1") are inserted
 // literally rather than treated as regex replacement patterns.
+//
+// SINGLE PASS: one regex over the TEMPLATE ONLY replaces every placeholder in a single sweep, so an
+// inserted value is never re-scanned. (The old per-key sequential replace re-scanned the accumulating
+// result, so a value containing "{{OTHER}}" — e.g. untrusted collection text — got OTHER's value
+// injected, and the outcome depended on object key order.) Arrays are still left as literal
+// placeholders (a build script expands them); keys are matched exactly between {{ and }}.
 function replaceVariables(template, vars) {
-  let result = template;
+  const replacements = new Map();
+  for (const [key, value] of Object.entries(vars)) {
+    if (Array.isArray(value)) continue; // handled by component build scripts — leave the placeholder
+    replacements.set(key, value instanceof RawHtml ? value.value : escapeHtml(value));
+  }
+  if (replacements.size === 0) return template;
 
-  Object.entries(vars).forEach(([key, value]) => {
-    // Skip arrays - they should be handled by component build scripts
-    if (Array.isArray(value)) {
-      return;
-    }
-
-    const replacement = value instanceof RawHtml ? value.value : escapeHtml(value);
-    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g');
-    result = result.replace(regex, () => replacement);
-  });
-
-  return result;
+  // Longest key first so a key that is a prefix of another can't shadow it (the {{ }} anchors already
+  // disambiguate, but this keeps the alternation deterministic). Keys are regex-escaped.
+  const pattern = [...replacements.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const regex = new RegExp(`\\{\\{(${pattern})\\}\\}`, 'g');
+  // The captured group is the real key text; look it up (a matched key is always present).
+  return template.replace(regex, (match, key) => replacements.has(key) ? replacements.get(key) : match);
 }
 
 // Function to build a single component
