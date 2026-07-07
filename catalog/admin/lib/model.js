@@ -61,6 +61,13 @@ function partFiles(itemDir, part) {
   return listFiles(itemDir).filter(f => part.regex.test(f));
 }
 
+// The first non-`object` part whose glob matches `filename` (a servable/deletable file part), or null.
+// Scopes the file GET/DELETE routes to actual paths/file_path parts, so an image route can't reach the
+// `object` part's data file (e.g. product.json).
+function filePart(parts, filename) {
+  return parts.find(p => p.type !== 'object' && p.regex.test(filename)) || null;
+}
+
 // The filename to write an object part to: the existing match if any, else the `match` when it is a
 // literal filename (no glob metacharacters). Returns null when it can't be determined (a glob match on
 // a not-yet-created file) — the caller turns that into a 400.
@@ -84,4 +91,4 @@ function readItemParts(itemDir, parts) {
   return out;
 }
 
-module.exports = { globToRegExp, readJsonSafe, listFiles, modelParts, partFiles, objectFileName, readItemParts };
+module.exports = { globToRegExp, readJsonSafe, listFiles, modelParts, partFiles, filePart, objectFileName, readItemParts };

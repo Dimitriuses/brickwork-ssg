@@ -164,7 +164,7 @@ engine checks and each site test's `ctx.buildDir` point at the real (possibly re
 
 **Status.** ✅ Fixed.
 
-## Admin: file routes aren't scoped to the part, and writes are CSRF-able
+## ✅ Admin: file routes aren't scoped to the part, and writes are CSRF-able *(fixed)*
 
 **Symptom.** Two related holes in `catalog/admin/server.js`:
 1. `DELETE …/parts/:part/files/:filename` validates only that the part *exists*, then unlinks any
@@ -179,11 +179,17 @@ engine checks and each site test's `ctx.buildDir` point at the real (possibly re
 **Why it matters.** The admin edits *real source data* (the private site's gitignored collections).
 Path traversal was hardened; part-scoping and browser-mediated requests weren't.
 
-**Fix (sketch).** (1) On the file routes require `part.regex.test(filename)` and reject `object`
-parts. (2) Reject requests whose `Origin`/`Host` isn't the admin's own origin (cheap, no session
-machinery), and say so in the startup banner.
+**Fix.** ✅ Done. **(1)** New `model.filePart(parts, filename)` returns the servable (non-`object`)
+part a filename belongs to, or `null`. The `GET /files/…` route now serves only files matching a
+non-object part, and the `DELETE …/files/:filename` route rejects `object` parts and requires
+`part.regex.test(filename)` — so neither can touch the data file. **(2)** A new pure module
+[catalog/admin/lib/security.js](../catalog/admin/lib/security.js) provides `hostAllowed` (loopback
+Host only — the DNS-rebinding guard, applied when bound localhost-only) and `crossOriginBlocked`
+(refuse a state-changing request whose `Origin` is cross-site — the CSRF guard); a first middleware
+in `server.js` enforces both, and the startup banner notes it. Smoke unit-tests `filePart` and both
+predicates.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Admin ↔ engine data-model parity gaps (nested matches, schema features, image order)
 

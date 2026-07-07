@@ -11,6 +11,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const model = require('./lib/model');
+const security = require('./lib/security'); // pure Host/Origin predicates (DNS-rebinding + CSRF)
 const fieldTypes = require('./public/fieldTypes'); // lives in public/ so it is also served to the browser
 
 const app = express();
@@ -117,15 +118,30 @@ function objectPartErrors(part, obj) { return part.schema ? fieldTypes.validateO
 })();
 
 // --- Middleware --------------------------------------------------------------
+// Browser-mediated defense FIRST (the admin is unauthenticated + edits real source data): reject a
+// foreign Host header when bound localhost-only (DNS rebinding), and refuse a cross-site Origin on
+// any state-changing request (CSRF). See lib/security.js.
+app.use((req, res, next) => {
+  if (LOCALHOST_ONLY && !security.hostAllowed(req.headers.host)) {
+    return res.status(403).json({ error: 'Forbidden: unexpected Host header (admin is bound to localhost)' });
+  }
+  if (security.crossOriginBlocked(req.method, req.headers.origin, req.headers.host)) {
+    return res.status(403).json({ error: 'Forbidden: cross-origin request refused' });
+  }
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve an item's source files (for image previews etc.) straight from the collection source.
+// Serve an item's source files (for image previews etc.) straight from the collection source. Scoped
+// to a servable (non-`object`) part, so the data file (e.g. product.json) is never served here.
 app.get('/files/:collection/:id/:filename', (req, res) => {
   try {
     const c = getCollection(req.params.collection);
-    const filePath = resolveWithin(itemDirOf(c, req.params.id), safeSeg(req.params.filename, 'filename'));
+    const filename = safeSeg(req.params.filename, 'filename');
+    if (!model.filePart(model.modelParts(c), filename)) return res.status(404).end();
+    const filePath = resolveWithin(itemDirOf(c, req.params.id), filename);
     if (!fs.existsSync(filePath)) return res.status(404).end();
     res.sendFile(filePath);
   } catch (e) { res.status(e.status || 400).end(); }
@@ -267,8 +283,13 @@ app.post('/api/collections/:collection/items/:id/parts/:part/files', (req, res) 
 app.delete('/api/collections/:collection/items/:id/parts/:part/files/:filename', (req, res) => {
   try {
     const c = getCollection(req.params.collection);
-    partOf(c, req.params.part); // validates the part exists
-    const filePath = resolveWithin(itemDirOf(c, req.params.id), safeSeg(req.params.filename, 'filename'));
+    const part = partOf(c, req.params.part);
+    // Scope the delete to THIS part: never remove an object/data file through a file manager, and only
+    // a filename that belongs to the part's glob (so DELETE .../parts/images/files/product.json fails).
+    if (part.type === 'object') return res.status(400).json({ error: `Part "${part.name}" does not hold files` });
+    const filename = safeSeg(req.params.filename, 'filename');
+    if (!part.regex.test(filename)) return res.status(400).json({ error: `File "${filename}" does not belong to part "${part.name}" (${part.match})` });
+    const filePath = resolveWithin(itemDirOf(c, req.params.id), filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
     fs.unlinkSync(filePath);
     res.json({ success: true });
@@ -289,7 +310,7 @@ app.listen(PORT, HOST, () => {
   console.log(`🔒 Bind: ${HOST}${LOCALHOST_ONLY ? ' (localhost only)' : ' (ALL interfaces — exposed to the network)'}`);
   console.log('========================================');
   if (!LOCALHOST_ONLY) console.log('⚠  localhost_only is off — this admin is reachable from the network. Ensure you trust it.');
-  else console.log('⚠  Unauthenticated — local development only.');
+  else console.log('⚠  Unauthenticated — local development only (Host-pinned + cross-origin writes refused).');
   console.log('Press Ctrl+C to stop');
   console.log('');
 });

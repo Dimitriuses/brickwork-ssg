@@ -1139,6 +1139,26 @@ try {
   try { fs.rmSync(amtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
 
+// Admin file-route part-scoping: model.filePart(parts, filename) returns the servable (non-object)
+// part a filename belongs to, or null — so the file GET/DELETE routes can't reach the data file.
+check('admin security: filePart scopes files to non-object parts (image ok, data file null)',
+  !!adminModel.filePart(amParts, '1.png') && adminModel.filePart(amParts, 'product.json') === null &&
+  adminModel.filePart(amParts, 'nope.txt') === null);
+
+// Admin request security (pure predicates): loopback Host allowed / foreign Host blocked (DNS
+// rebinding), and a state-changing cross-origin request refused (CSRF) while safe/same-origin pass.
+const adminSec = require('../catalog/admin/lib/security');
+check('admin security: hostAllowed only for loopback hosts',
+  adminSec.hostAllowed('127.0.0.1:3000') && adminSec.hostAllowed('localhost:3000') &&
+  adminSec.hostAllowed('[::1]:3000') && !adminSec.hostAllowed('evil.com') && !adminSec.hostAllowed('192.168.1.5:3000'));
+check('admin security: crossOriginBlocked refuses cross-site writes, allows GET/same-origin/no-origin',
+  adminSec.crossOriginBlocked('POST', 'http://evil.com', '127.0.0.1:3000') === true &&
+  adminSec.crossOriginBlocked('DELETE', 'http://attacker.test', 'localhost:3000') === true &&
+  adminSec.crossOriginBlocked('POST', 'not-a-url', '127.0.0.1:3000') === true &&
+  adminSec.crossOriginBlocked('GET', 'http://evil.com', '127.0.0.1:3000') === false &&
+  adminSec.crossOriginBlocked('POST', 'http://127.0.0.1:3000', '127.0.0.1:3000') === false &&
+  adminSec.crossOriginBlocked('POST', undefined, '127.0.0.1:3000') === false);
+
 // Phase 3.2 (field-type registry): fieldTypes drives object-part forms + server-side schema validation.
 // Isomorphic (require in Node / <script> in the browser); smoke unit-tests the pure registry.
 const FT = require('../catalog/admin/public/fieldTypes');
