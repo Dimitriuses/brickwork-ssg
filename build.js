@@ -577,6 +577,12 @@ function pageAssetName(relFolder) {
   return String(relFolder).split(/[\\/]/).map(seg => seg.replace(/^_/, '')).filter(Boolean).join('-');
 }
 
+// The components whose assets are actually USED by some built page — accumulated by
+// collectComponentAssets as pages build, then copied by copyUsedComponentAssets. So only used
+// components' CSS/JS ship (matching the documented "linked only where used" contract), instead of
+// every component folder's assets shipping regardless.
+const usedAssetComponents = new Set();
+
 function collectComponentAssets(kind, components, pageAssetFolder) {
   const { sourceFile, base } = ASSET_KINDS[kind];
   const files = [`assets/${kind}/global.${kind}`];
@@ -586,6 +592,12 @@ function collectComponentAssets(kind, components, pageAssetFolder) {
     if (added.has(compName)) return;
     added.add(compName);
 
+    // A component named "global" would clobber the site's global.<kind> asset — reserve the name.
+    if (compName === 'global') {
+      deferWarning(`a component is named "global", which collides with the site global.css/js asset — rename it; its assets are skipped`);
+      return;
+    }
+
     // Dependencies and declared sub-components first (depth-first), then this component's own
     // asset - all resolved site-first. Sub-components get their own bundled asset when used.
     (readComponentConfig(compName).dependencies || []).forEach(addComponent);
@@ -593,6 +605,7 @@ function collectComponentAssets(kind, components, pageAssetFolder) {
 
     if (resolveComponentFile(compName, sourceFile)) {
       files.push(`assets/${kind}/${compName}.${kind}`);
+      usedAssetComponents.add(compName); // mark for copying (see copyUsedComponentAssets)
     }
   }
 
@@ -612,36 +625,31 @@ function collectComponentAssets(kind, components, pageAssetFolder) {
 const collectComponentCSS = (components, pageAssetFolder) => collectComponentAssets('css', components, pageAssetFolder);
 const collectComponentJS = (components, pageAssetFolder) => collectComponentAssets('js', components, pageAssetFolder);
 
-// Copy the global + component assets of one kind ('css' or 'js') into build/. Page-specific assets
-// are handled separately by copyPageAssets (driven by the built-page set, so excluded/nested pages
-// are correct). Component assets: engine + site (site overrides win, registry-relocated too), plus
-// each component's declared sub-components (which may carry their own nested assets).
-function copyComponentAssets(kind) {
-  const { sourceFile } = ASSET_KINDS[kind];
-  const buildAssetDir = path.join(BUILD_DIR, 'assets', kind);
-
-  if (!fs.existsSync(buildAssetDir)) fs.mkdirSync(buildAssetDir, { recursive: true });
-
-  // Global asset
-  const globalAsset = path.join(ASSETS_DIR, kind, `global.${kind}`);
-  if (fs.existsSync(globalAsset)) {
-    fs.copyFileSync(globalAsset, path.join(buildAssetDir, `global.${kind}`));
+// Copy the site's global.css / global.js (needed by every page) into build/assets/<kind>/.
+function copyGlobalAssets() {
+  for (const kind of ['css', 'js']) {
+    const buildAssetDir = path.join(BUILD_DIR, 'assets', kind);
+    fs.mkdirSync(buildAssetDir, { recursive: true });
+    const globalAsset = path.join(ASSETS_DIR, kind, `global.${kind}`);
+    if (fs.existsSync(globalAsset)) fs.copyFileSync(globalAsset, path.join(buildAssetDir, `global.${kind}`));
   }
+}
 
-  // Component assets (engine + site; site overrides win, registry-relocated too), plus each
-  // component's declared sub-components (which may carry their own nested assets).
-  allComponentNames().forEach(compName => {
-    const assetFile = resolveComponentFile(compName, sourceFile);
-    if (assetFile) {
-      fs.copyFileSync(assetFile, path.join(buildAssetDir, `${compName}.${kind}`));
+// Copy ONLY the components whose assets are used by some built page (usedAssetComponents, populated by
+// collectComponentAssets). Called after all pages are built, so the set is complete. Resolved
+// site-first (site overrides win, registry-relocated too); a sub-component was recorded under its own
+// name during collection, so it is copied here directly. So a retired/experimental component's dead
+// CSS/JS never ships (the "linked only where used" contract, for the copy too).
+function copyUsedComponentAssets() {
+  for (const kind of ['css', 'js']) {
+    const { sourceFile } = ASSET_KINDS[kind];
+    const buildAssetDir = path.join(BUILD_DIR, 'assets', kind);
+    fs.mkdirSync(buildAssetDir, { recursive: true });
+    for (const compName of usedAssetComponents) {
+      const assetFile = resolveComponentFile(compName, sourceFile);
+      if (assetFile) fs.copyFileSync(assetFile, path.join(buildAssetDir, `${compName}.${kind}`));
     }
-    (readComponentConfig(compName).subComponents || []).forEach(subName => {
-      const subAsset = resolveComponentFile(subName, sourceFile);
-      if (subAsset) {
-        fs.copyFileSync(subAsset, path.join(buildAssetDir, `${subName}.${kind}`));
-      }
-    });
-  });
+  }
 }
 
 // Copy the page-specific style.css/script.js for the set of BUILT page source folders (normal +
@@ -669,9 +677,6 @@ function copyPageAssets(pageFolders) {
     }
   }
 }
-
-const copyComponentCSS = () => copyComponentAssets('css');
-const copyComponentJS = () => copyComponentAssets('js');
 
 // Validate a collection's data_model shape (build-time, loud). Returns a list of error
 // strings; empty means valid.
@@ -912,12 +917,10 @@ if (fs.existsSync(imagesDir)) {
   log.info('[ASSETS] Copied images to build/assets/', { phase: 'assets' });
 }
 
-// Copy component CSS and JS
-copyComponentCSS();
-log.info('[CSS] Component styles copied to build/assets/css/', { phase: 'assets' });
-
-copyComponentJS();
-log.info('[JS] Component scripts copied to build/assets/js/\n', { phase: 'assets' });
+// Copy the global CSS/JS now (needed by every page); per-component assets are copied AFTER the pages
+// build, so only the components actually used ship (copyUsedComponentAssets below).
+copyGlobalAssets();
+log.info('[ASSETS] Global styles/scripts copied to build/assets/', { phase: 'assets' });
 
 // Copy collections (products, custom items, etc.) from shared folder
 copyCollections();
@@ -1015,6 +1018,11 @@ templatePages.forEach(({ file, config }) => {
     buildErrors++;
   }
 });
+
+// Now that every page has been built, usedAssetComponents holds exactly the components some page
+// links — copy only those (dead/experimental components' assets never ship).
+copyUsedComponentAssets();
+log.info('[ASSETS] Component styles/scripts copied (used only)', { phase: 'assets' });
 
 // Surface unresolved {{VAR}} placeholders at build time — a warning (not fatal); `ssg test` still
 // *fails* on them (lib/checks.js). Comments are stripped first (as in checks.js) so a commented-out

@@ -1269,6 +1269,29 @@ const gridCustom = productsBuild.build({ COLLECTION: 'things', LINK_PATTERN: 'it
 check('products grid: default detail link is product-{slug}.html; LINK_PATTERN overrides it',
   /href="product-red-brick\.html"/.test(gridDefault) && /href="item-red-brick\.html"/.test(gridCustom));
 
+// Component assets ship only where USED: a component that no page references must not have its
+// style.css/script.js copied into build/ (the "linked only where used" contract, for the copy too).
+const au = fs.mkdtempSync(path.join(os.tmpdir(), 'bwusedassets-'));
+const auArg = au.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(au, p)), { recursive: true }); fs.writeFileSync(path.join(au, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'AU' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('components/usedbox/usedbox.html', '<div>used</div>');
+  mk('components/usedbox/style.css', '/* USED */');
+  mk('components/deadbox/deadbox.html', '<div>dead</div>');
+  mk('components/deadbox/style.css', '/* DEAD - must not ship */');
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [{ name: 'usedbox', vars: {} }] }));
+  mk('pages/index/index.html', '<main>hi</main>');
+  fs.mkdirSync(path.join(au, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${auArg}"`, { cwd: root, stdio: 'pipe' });
+  check('assets: only used components ship (dead component CSS not copied)',
+    fs.existsSync(path.join(au, 'build', 'assets', 'css', 'usedbox.css')) &&
+    !fs.existsSync(path.join(au, 'build', 'assets', 'css', 'deadbox.css')));
+} finally {
+  try { fs.rmSync(au, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Generated pages: a map's reserved PAGE_TITLE / PAGE_DESCRIPTION keys drive the page title from ANY
 // part (not just a part literally named `data`); and a `map` template with no HTML fails loud.
 const g13 = fs.mkdtempSync(path.join(os.tmpdir(), 'bwgen13-'));

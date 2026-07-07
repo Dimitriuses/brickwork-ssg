@@ -318,7 +318,7 @@ Smoke asserts a `PAGE_TITLE`-mapped title from a non-`data` part and the missing
 
 **Status.** ✅ Fixed.
 
-## Every component's assets ship regardless of use (docs say otherwise) + `global` name collision
+## ✅ Every component's assets ship regardless of use (docs say otherwise) + `global` name collision *(fixed)*
 
 **Symptom.** `copyComponentAssets` copies **every** component folder's `style.css`/`script.js`
 (via `allComponentNames()`) into `build/assets/css|js/` — only the *linking* is per-page. CLAUDE.md
@@ -331,11 +331,16 @@ as phantom "components").
 **Why it matters.** Leak control was the headline of v0.4 (`copy: false`) — the asset side quietly
 violates the same principle, plus a docs/behavior mismatch.
 
-**Fix (sketch).** Collect the used-component set during the page pass (it's already computed
-per-page) and copy the union afterwards — or copy lazily from `collectComponentAssets` hits.
-Reserve/guard the `global` asset name.
+**Fix.** ✅ Done. `collectComponentAssets` now records each component it links into a module-level
+`usedAssetComponents` set as pages build; a new `copyUsedComponentAssets()` (run **after** all pages
+build, when the set is complete) copies only those — so a retired/experimental component's dead
+CSS/JS never ships, making the docs' "linked only where used" true for the copy too. `global.css`/
+`global.js` are copied separately up front (`copyGlobalAssets`), and a component **named `global`**
+is refused with a warning (its assets skipped) so it can't clobber the site global. Because copying
+is driven by the used set rather than `allComponentNames()`, phantom registry folders like `blocks/`
+are never copied. Smoke asserts a dead component's CSS is absent while a used one's ships.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## `slugify` collapses non-Latin names to `item` — guaranteed collisions
 
