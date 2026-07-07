@@ -146,7 +146,7 @@ release-noted. Both first-party sites build unchanged; smoke asserts the base+ov
 
 **Status.** ✅ Fixed.
 
-## `ssg test` hardcodes `build/` — a site with a relocated `dirs.output` can never pass
+## ✅ `ssg test` hardcodes `build/` — a site with a relocated `dirs.output` can never pass *(fixed)*
 
 **Symptom.** `lib/test-runner.js:30` does `path.join(siteRoot, 'build')` while the build honors
 `dirs.output` (and the same file resolves `dirs.test` two lines later). *Reproduced:* a site with
@@ -158,10 +158,11 @@ same wrong `ctx.buildDir`.
 the one consumer that didn't get the memo — and it's the verification layer, where a stale-dir
 false-positive is most costly.
 
-**Fix (sketch).** `const buildDir = siteDirs(siteRoot).output;` — one line, plus a smoke check
-(`dirs.output` fixture already exists; extend it to run `ssg test`).
+**Fix.** ✅ Done. `runSiteTests` now resolves `const buildDir = siteDirs(siteRoot).output;` — so the
+engine checks and each site test's `ctx.buildDir` point at the real (possibly relocated) output. The
+`dirs.output` smoke fixture now also runs `ssg test` and asserts the checks pass against `dist/`.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Admin: file routes aren't scoped to the part, and writes are CSRF-able
 

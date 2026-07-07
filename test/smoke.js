@@ -820,6 +820,11 @@ try {
     fs.existsSync(path.join(dirtmp, 'src', 'pages', 'about', 'about.json')) &&
     fs.existsSync(path.join(dirtmp, 'src', 'components', 'carousel', 'carousel.html')) &&
     !fs.existsSync(path.join(dirtmp, 'pages')));
+  // `ssg test` honours dirs.output too: it must check the relocated dist/, not a hardcoded build/.
+  const dirTestOut = execSync(`node cli.js test --site "${dirtmpArg}"`, { cwd: root, stdio: 'pipe' }).toString();
+  check('config.json `dirs`: ssg test checks the relocated output dir (not build/)',
+    /Engine checks:/.test(dirTestOut) && !/FAIL build\/ directory exists/.test(dirTestOut) &&
+    /no unresolved \{\{VAR\}\} placeholders/.test(dirTestOut));
 } finally {
   try { fs.rmSync(dirtmp, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 }
