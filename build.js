@@ -187,6 +187,18 @@ function replaceVariables(template, vars) {
   return template.replace(regex, (match, key) => replacements.has(key) ? replacements.get(key) : match);
 }
 
+// Build scripts + generators required this build, cached by absolute path. They are pure and the file
+// doesn't change mid-build, so requiring once (instead of delete-cache + require on EVERY component
+// instance / template page) removes redundant module loads on the hot path. (A future watch mode that
+// rebuilds in the same process would clear this between builds; a single `ssg build` runs build.js
+// once, so per-build = once here.)
+const _moduleCache = new Map();
+function requireOnce(absolutePath) {
+  let mod = _moduleCache.get(absolutePath);
+  if (!mod) { mod = require(absolutePath); _moduleCache.set(absolutePath, mod); }
+  return mod;
+}
+
 // Function to build a single component
 function buildComponent(componentName, vars = {}, buildStack = []) {
   // Recursion protection - check if this component is already being built
@@ -205,11 +217,8 @@ function buildComponent(componentName, vars = {}, buildStack = []) {
   let html = '';
 
   if (buildScriptPath) {
-    // Component has custom build logic
-    const absolutePath = path.resolve(buildScriptPath);
-    delete require.cache[absolutePath]; // Clear cache to allow rebuilds
-
-    const buildScript = require(absolutePath);
+    // Component has custom build logic — required once per build (cached), not per instance.
+    const buildScript = requireOnce(path.resolve(buildScriptPath));
     html = buildScript.build(vars, loadComponent, replaceVariables, {
       slugify, escapeHtml, raw, collection: collectionByName,
       // Scoped logger: a build script reports through log with its provenance auto-filled.
@@ -502,8 +511,7 @@ function expandTemplatePage(templateFile, templateConfig) {
   // path: one descriptor per collection item, vars filled from `generatorOptions.map`.
   let descriptors;
   if (generatorPath) {
-    delete require.cache[generatorPath];
-    const mod = require(generatorPath);
+    const mod = requireOnce(generatorPath);
     if (typeof mod.generate !== 'function') {
       log.error(`Generator "${opts.generator}" has no generate(ctx, options) export`, { phase: 'templates' });
       buildErrors++;

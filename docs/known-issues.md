@@ -448,7 +448,7 @@ in the doc). Smoke asserts the page stub is the grouped form with no `header_the
 
 **Status.** ✅ Fixed (concrete drift swept; the broader CLAUDE.md prose rewrite stays a separate docs task).
 
-## Hot-path caching: component configs and files re-resolved per page × component
+## ✅ Hot-path caching: component configs and files re-resolved per page × component *(fixed)*
 
 **Symptom.** The per-page loops re-do filesystem work that never changes within a build:
 `readComponentConfig` re-reads + re-parses each component's `.json` on **every**
@@ -465,12 +465,18 @@ site with a dozen components each would spend most of its build in redundant sta
 of it is trivially memoizable because the build is single-shot (nothing mutates components
 mid-run).
 
-**Fix (sketch).** Memoize `readComponentConfig` and `resolveComponentFile` in
-`lib/components.js` (per-factory `Map`, like the existing `_siteRegistry`/`_subcomponentMap`
-caches); require each build script once per build (the cache-bust is only needed *across* builds in
-a future watch mode — scope it there); read the generator registry once.
+**Fix.** ✅ Done. `lib/components.js` memoizes **`resolveComponentFile`** (per `(name, filename)`,
+caching the up-to-four `existsSync` probes) and **`readComponentConfig`** (per name) in per-factory
+`Map`s — the factory lives one build, like the existing `_siteRegistry`/`_subcomponentMap` caches
+(the sub-component scan only resolves top-level names, where the partial map can't poison a cached
+result). `build.js` requires each **build script and generator once per build** via a `requireOnce`
+module cache instead of `delete require.cache` + `require` per instance/template. (All engine build
+scripts are pure with no per-invocation module state, and a single `ssg build` runs `build.js` once,
+so per-build = once; a future watch mode would clear the cache between rebuilds.) Output is verified
+**byte-identical across two builds**; the full suite stays green. (The end-of-build `{{VAR}}` scan
+reads each HTML once — left as-is.)
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## ✅ Page config flat-mixes page identity, layout params, and content *(fixed)*
 
