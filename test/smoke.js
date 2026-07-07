@@ -592,6 +592,21 @@ check('used-materials: sub-components collapse to their parent folder (deploy fo
   uc.folders.includes('products') && uc.folders.includes('faq') &&
   !uc.folders.includes('productCard') && !uc.folders.includes('faqItem'));
 
+// used-materials discovers pages RECURSIVELY (like the build), so a component referenced only from a
+// NESTED page or an inline {{COMPONENT}} in a nested content file is not missed by `--all-used`.
+const nestedUsed = fs.mkdtempSync(path.join(os.tmpdir(), 'bwnested-'));
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(nestedUsed, p)), { recursive: true }); fs.writeFileSync(path.join(nestedUsed, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'N' }, nav: [] }));
+  mk('pages/blog/post/post.json', JSON.stringify({ page: 'post', layout: '_layout', components: [{ name: 'hero', vars: {} }] }));
+  mk('pages/blog/post/post.html', '<main>{{COMPONENT:faq}}</main>');
+  const un = usedComponentNames({ siteRoot: nestedUsed, engineRoot: root });
+  check('used-materials: nested page components + inline {{COMPONENT}} are discovered',
+    un.used.includes('hero') && un.used.includes('faq') && un.used.includes('_layout'));
+} finally {
+  try { fs.rmSync(nestedUsed, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Acceptance: `ssg add material --all-used` on an inheriting site -> it owns every used material
 // folder (the completeness the slim core relies on). Sub-components + dependencies come along.
 const utmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwall-'));

@@ -270,7 +270,7 @@ ALT/hash derivation is order-independent.)
 
 **Status.** ✅ Fixed.
 
-## `--all-used` detection is narrower than the build — nested/odd-named pages are missed
+## ✅ `--all-used` detection is narrower than the build — nested/odd-named pages are missed *(fixed)*
 
 **Symptom.** `lib/used-materials.js` scans only **top-level** `pages/<dir>/<dir>.json` +
 `<dir>.html`. The build finds pages recursively, with any `.json` filename, and content via
@@ -282,13 +282,15 @@ a config whose name differs from its folder, or a `content_file` body is invisib
 slim core breaks that site") realized in code: the bridge under-detects, and the miss surfaces
 later as a `not installed` build failure — or not at all until a page is added.
 
-**Fix (sketch).** Reuse the build's discovery: walk pages recursively (same rule as
-`findPageFiles`), read each config's `components`/`layout`, and scan the *resolved* content body
-(auto `<page>.html` **and** `content_file`) for `{{COMPONENT:x}}`. The acceptance test the plan
-proposed ("after `--all-used`, a build with the engine catalog emptied still succeeds") would have
-caught this — add it for a nested-page fixture.
+**Fix.** ✅ Done. `usedComponentNames` now discovers page configs the way the build does: a recursive
+walk of **every** `.json` under `pages/` (so `pages/blog/post/post.json` counts), applying the same
+classification (a `_`-excluded non-template page is skipped, template pages counted regardless of
+`_`). For each config it adds `components[].name` + the `layout` name and scans the **resolved**
+content body — `content_file` → inline `content` → auto `<page>.html`/`<basename>.html` — for inline
+`{{COMPONENT:x}}`. Smoke adds a nested-page fixture (a component in a nested `components: []` and an
+inline `{{COMPONENT}}` in its nested content) and asserts both are found.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Generated pages hardcode the `data` part + can't map `title`; a missing template HTML is silent
 
