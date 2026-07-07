@@ -1254,6 +1254,21 @@ const gridCustom = productsBuild.build({ COLLECTION: 'things', LINK_PATTERN: 'it
 check('products grid: default detail link is product-{slug}.html; LINK_PATTERN overrides it',
   /href="product-red-brick\.html"/.test(gridDefault) && /href="item-red-brick\.html"/.test(gridCustom));
 
+// Carousel is multi-instance: it derives a per-instance DOM id (from ALT, or an explicit CAROUSEL_ID)
+// and points its thumbnails at that id — so two carousels on one page don't collide on #productCarousel.
+const carouselBuild = require('../catalog/carousel/carousel.build.js');
+const { slugify: slugifyH } = require('../lib/slugify');
+const loadCar = () => '<div id="{{CAROUSEL_ID}}" class="carousel">{{CAROUSEL_SLIDES}}{{THUMBNAIL_IMAGES}}</div>';
+const carHelpers = { raw: rawH, escapeHtml: escH, slugify: slugifyH };
+const car1 = carouselBuild.build({ IMAGES: ['a.png', 'b.png'], ALT: 'Brick A' }, loadCar, miniReplace, carHelpers);
+const car2 = carouselBuild.build({ IMAGES: ['c.png', 'd.png'], ALT: 'Brick B' }, loadCar, miniReplace, carHelpers);
+const carId = carouselBuild.build({ IMAGES: ['a.png', 'b.png'], CAROUSEL_ID: 'gallery-1' }, loadCar, miniReplace, carHelpers);
+check('carousel: distinct per-instance ids from ALT + thumbnails target their own carousel',
+  /id="carousel-brick-a"/.test(car1) && /id="carousel-brick-b"/.test(car2) &&
+  /data-bs-target="#carousel-brick-a"/.test(car1) && /data-bs-target="#carousel-brick-b"/.test(car2) &&
+  !/productCarousel/.test(car1));
+check('carousel: explicit CAROUSEL_ID overrides the derived id', /id="gallery-1"/.test(carId));
+
 // Engine checks generalized: every local .html link (not just product-*) must resolve; external links
 // are ignored. Build a site with a dangling local link and assert standardChecks flags it.
 const bltmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bwlinks-'));

@@ -249,7 +249,7 @@ and that a dangling local link is flagged.
 
 **Status.** ✅ Fixed.
 
-## Carousel component is single-instance-per-page (hardcoded id)
+## ✅ Carousel component is single-instance-per-page (hardcoded id) *(fixed)*
 
 **Symptom.** `catalog/carousel/carousel.html` hardcodes `id="productCarousel"`, and the build
 script's thumbnails all target `#productCarousel`. Two carousels on one page (e.g. a future gallery
@@ -259,11 +259,16 @@ carousel.
 **Why it matters.** It's the flagship "computed output as a component" material — and it silently
 breaks the first time it's composed twice, the main thing components are for.
 
-**Fix (sketch).** Accept a `CAROUSEL_ID` var (slugified; default derived from `ALT`/a counter),
-fill it into the template + thumbnail `data-bs-target`s. The products grid already does per-item
-ids (`carousel-<slug>`) — same pattern.
+**Fix.** ✅ Done. The template is `id="{{CAROUSEL_ID}}"` and `carousel.build.js` computes a
+selector-safe per-instance id: an explicit `CAROUSEL_ID` if given, else `carousel-<slugified ALT>`
+(ALT is usually the item name), else a short stable hash of the image paths. The thumbnails point
+`data-bs-target` at that id. `script.js` already read each carousel's own `id` when injecting
+controls, so it needed no change. Smoke unit-tests two carousels getting distinct ids + thumbnail
+targets, and the explicit-id override. (A count-based fallback was avoided: `buildComponent`
+cache-busts each build script, so module state wouldn't persist across instances — the
+ALT/hash derivation is order-independent.)
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## `--all-used` detection is narrower than the build — nested/odd-named pages are missed
 
