@@ -4,6 +4,397 @@ A running log of bugs and structural inconsistencies, so they aren't forgotten. 
 entries at the top; keep each short — symptom, why it matters, a sketch of the fix, status. Resolved
 entries stay as a record, marked ✅ Fixed.
 
+> The block of open entries below is from a **2026-07-07 audit** (engine ≈ v0.7.0) — ordered
+> most-severe first. Each was verified against the code (and, where marked *reproduced*, against a
+> live fixture build).
+
+## A mis-set `dirs.output` deletes site source — the wipe is unvalidated
+
+**Symptom.** The build wipes `BUILD_DIR` blind (`fs.rmSync(BUILD_DIR, { recursive: true })`,
+build.js ~840) and `lib/dirs.js` does no validation of `dirs.output`. *Reproduced:* a site with
+`"dirs": { "output": "pages" }` **deleted its own `pages/` source tree**, built 0 pages, and
+reported "Build completed successfully" (exit 0). `"output": "."` would delete the whole site
+including `.git`; `".."` the parent folder.
+
+**Why it matters.** One config typo destroys un-committed work irrecoverably. The build is
+documented as destructive, but the destructive *target* is user-configurable with zero guarding —
+the sharpest edge in the project.
+
+**Fix (sketch).** Validate the resolved output dir at startup, refuse loud (before the wipe) when it
+(a) equals or contains `SITE_ROOT`, (b) escapes `SITE_ROOT`, or (c) equals/contains any configured
+source dir (`pages`/`components`/`generators`/`assets`, `dirs.database`'s folder, `dirs.admin`) or
+`config.json` itself. Cheap and total: every case is a `path.resolve` prefix check.
+
+**Status.** Open (data-loss risk — fix first).
+
+## `log.error` doesn't fail the build — some errors exit 0 as "completed successfully"
+
+**Symptom.** `build.js` keys the exit code and the summary verdict off its own `buildErrors`
+counter, not the logger's tally — and not every `log.error` call site increments it. *Reproduced:* a
+collection whose `source` folder is missing prints `[ERROR] ghost: Source not found`, then "Build
+completed successfully", exit **0**. (`lib/log.js` exposes `errorCount` precisely for this — the
+terminal-UX plan says "the logger owns the error tally → it drives the process exit code" — but
+nothing reads it.) Relatedly, `resolveCollectionItems` on a missing source silently returns `[]`,
+so a template page "successfully" builds zero pages.
+
+**Why it matters.** CI ships a site with no products and a green build. Two parallel error tallies
+is exactly the drift the log module was built to end.
+
+**Fix (sketch).** At the end of `build.js`: `buildErrors = Math.max(buildErrors, log.errorCount)`
+before `log.summary(...)` (or drop `buildErrors` entirely and use `log.errorCount`). Then delete the
+per-site increments that only exist to mirror it.
+
+**Status.** Open.
+
+## No page-config validation — a config without `page` ships `build/undefined.html`
+
+**Symptom.** `buildPage` uses `pageData.page` unchecked: a page `.json` missing the `page` field
+writes **`build/undefined.html`** (*reproduced*, exit 0, no warning). The auto-content lookup also
+keys off `pageData.page` (`undefined.html` was looked for), so the page body silently comes up
+empty. And since `findPageFiles` collects **every** `.json` under `pages/` (any filename), a stray
+data/notes JSON dropped in a page folder becomes a "page" too.
+
+**Why it matters.** The engine's stated philosophy is loud build-time validation (template pages
+get it; data models get it) — normal pages, the most common material, get none.
+
+**Fix (sketch).** Validate on classification: a non-template page config must have a non-empty
+string `page` (error with the file path otherwise, same style as `expandTemplatePage`'s `fail`).
+Consider requiring a minimal shape (`page` + optional known keys) so foreign JSON files are
+rejected by name instead of built.
+
+**Status.** Open.
+
+## Page-folder assets: nested pages ignored, excluded `_` folders still copied, `_`-strip collides
+
+**Symptom.** Three related holes in the page-asset pass (`collectComponentAssets` /
+`copyComponentAssets`):
+1. Page discovery is **recursive** (`pages/blog/post/post.json` builds), but the asset pass only
+   handles **top-level** `pages/<dir>/` — a nested page's `style.css`/`script.js` is silently
+   neither copied nor linked (*reproduced*).
+2. A `_`-prefixed page folder is **excluded from the build**, but its `style.css`/`script.js` is
+   still copied into `build/assets/*/pages/`.
+3. Output names strip the leading `_`, so `pages/_shop/style.css` and `pages/shop/style.css` both
+   emit `pages/shop.css` — *reproduced:* the **excluded draft folder's CSS silently overwrote the
+   real page's**, in filesystem-enumeration order (platform-dependent which one wins).
+
+**Why it matters.** "Comment out a page with `_`" can silently restyle the live page it shadowed;
+nested pages half-work (HTML yes, assets no) with no message.
+
+**Fix (sketch).** Drive the copy pass from the same recursive scan as page discovery; skip
+`_`-excluded folders (they aren't built); derive asset names from the page's *relative* folder path
+(collision-free) or error on an output-name collision instead of overwriting.
+
+**Status.** Open.
+
+## Placeholder re-substitution — `{{X}}` inside a *value* is expanded (order-dependent)
+
+**Symptom.** `replaceVariables` loops over vars and re-scans the whole accumulated result for each
+key, so a **value** containing placeholder-looking text is substituted by any var processed later.
+*Reproduced:* component vars `{ "AAA": "user typed {{ZZZ}} here", "ZZZ": "SECRET" }` render
+`AAA` as `user typed SECRET here`. In `buildPage`'s `pageVars`, `CSS_LINKS`/`JS_SCRIPTS`/
+`HEAD_EXTRA`/`BODY_EXTRA` are inserted **after** `CONTENT` — so untrusted collection data (fed into
+content via `map`/generator vars) containing e.g. `{{JS_SCRIPTS}}` gets the real script tags
+injected. HTML-escaping doesn't help: `{{…}}` survives it.
+
+**Why it matters.** It's a data→template injection channel (admin-editable `product.json` text can
+pull build internals into the page) and makes rendering depend on object key order — a classic
+latent heisenbug.
+
+**Fix (sketch).** Single-pass replacement: build one `\{\{(k1|k2|…)\}\}` regex over the *template
+only* with a callback lookup (longest-key-first or exact-name match). Values are then never
+re-scanned. Semantics stay identical for every legitimate template.
+
+**Status.** Open.
+
+## A component's vars depend on *how* it was placed — three different scopes
+
+**Symptom.** The same component renders with different data depending on the mechanism: **declared**
+in `components: []` → only its own `vars` (`buildComponent(comp.name, comp.vars || {})` — no config
+vars; *reproduced:* `{{SITE_NAME}}` in a declared component stays literal and only surfaces via the
+unresolved-var warning); **inline** `{{COMPONENT:x}}` in content → the full `flatConfig` (and *no*
+page component vars, even if the same component is also declared with vars); **layout dependency**
+(header/footer) → all of `pageVars` (flatConfig + layout vars + chrome).
+
+**Why it matters.** "Why does `{{SITE_NAME}}` work in the header but not in my card component?" has
+a three-branch answer. It also blocks a component from being moved between placement styles without
+re-plumbing its vars.
+
+**Fix (sketch).** One scope rule: declared components render with `{ ...flatConfig, ...comp.vars }`
+(site config as base, own vars override — mirroring `pageVars`); inline placeholders keep
+`flatConfig`. One-line change in `buildPage`; verify against both sites (a component relying on a
+var being *absent* is unlikely but the bump is behavior-changing — release-note it).
+
+**Status.** Open.
+
+## `ssg test` hardcodes `build/` — a site with a relocated `dirs.output` can never pass
+
+**Symptom.** `lib/test-runner.js:30` does `path.join(siteRoot, 'build')` while the build honors
+`dirs.output` (and the same file resolves `dirs.test` two lines later). *Reproduced:* a site with
+`"output": "dist"` builds fine, then every engine check fails with `FAIL build/ directory exists`
+(or worse, checks a *stale* old `build/`, silently validating the wrong output). Site tests get the
+same wrong `ctx.buildDir`.
+
+**Why it matters.** The README sells `dirs` as covering the whole workspace; the test command is
+the one consumer that didn't get the memo — and it's the verification layer, where a stale-dir
+false-positive is most costly.
+
+**Fix (sketch).** `const buildDir = siteDirs(siteRoot).output;` — one line, plus a smoke check
+(`dirs.output` fixture already exists; extend it to run `ssg test`).
+
+**Status.** Open.
+
+## Admin: file routes aren't scoped to the part, and writes are CSRF-able
+
+**Symptom.** Two related holes in `catalog/admin/server.js`:
+1. `DELETE …/parts/:part/files/:filename` validates only that the part *exists*, then unlinks any
+   safe-segment filename in the item folder — so `DELETE …/parts/images/files/product.json`
+   **deletes the object part's data file** through the image manager. `GET /files/:collection/:id/
+   :filename` similarly serves any item file regardless of part.
+2. There's no auth *and no CSRF/Origin defense*: `express.urlencoded` + multer accept cross-origin
+   form posts, so while the server binds `127.0.0.1`, any web page the user visits can fire
+   create-item / upload-file POSTs at `http://127.0.0.1:3000` from their own browser (classic
+   local-dev-server CSRF / DNS-rebinding surface).
+
+**Why it matters.** The admin edits *real source data* (the private site's gitignored collections).
+Path traversal was hardened; part-scoping and browser-mediated requests weren't.
+
+**Fix (sketch).** (1) On the file routes require `part.regex.test(filename)` and reject `object`
+parts. (2) Reject requests whose `Origin`/`Host` isn't the admin's own origin (cheap, no session
+machinery), and say so in the startup banner.
+
+**Status.** Open.
+
+## Admin ↔ engine data-model parity gaps (nested matches, schema features, image order)
+
+**Symptom.** The admin re-implements item resolution and drifts from the engine in ways the docs
+don't admit:
+- **Flat vs recursive matching:** the engine matches `data_model` globs against **recursive**
+  relative paths (`listFilesRelative` — `gallery/*.jpg` works); the admin's `model.partFiles` lists
+  **immediate files only**, so a nested part builds fine but shows empty (and uploads flat) in the
+  admin. (The plan said "reuse the engine's reader — factor `resolveCollectionItems` into `lib/`";
+  what shipped is a self-contained near-copy.)
+- **Documented schema features that don't exist:** the admin plan's "Decided (final)" lists
+  per-field `default`, `validation` (min/max/pattern) and field-level `hide: true` — none are
+  implemented in `fieldTypes.js`/`app.js`. `orderable` is forwarded to the client
+  (server.js:83) but **no reorder endpoint or UI exists anywhere**.
+- **Image order is filename order** (the build sorts part files), the first image is the primary —
+  so the one ordering that matters (the primary product photo) cannot be controlled from the admin
+  at all, dead `orderable` knob notwithstanding.
+
+**Why it matters.** The admin's whole pitch is "the data model, rendered" — silent divergence from
+the build's semantics undermines it, and the unimplemented-but-documented knobs cost users real
+debugging time.
+
+**Fix (sketch).** Make `partFiles` recursive with relative paths (mirror `listFilesRelative`);
+either implement `default`/`validation`/field-`hide` in the field-type registry or strike them from
+the plan's Decided list; give `paths` parts a rename-based reorder (or a `data.primary` convention)
+and delete `orderable` until it does something.
+
+**Status.** Open.
+
+## Products grid hardcodes the detail-page link pattern
+
+**Symptom.** `catalog/products/products.build.js` emits `PRODUCT_LINK: \`product-${id}.html\`` —
+but the detail page's name is owned by the *template page*'s `generatorOptions.pageName`. Rename
+the pattern (`item-{slug}`) or point the grid at another collection and every card links to a 404.
+`lib/checks.js` compounds it by only link-checking `href="product-*.html"` (a content-specific
+pattern in the "content-agnostic" checks).
+
+**Why it matters.** Two materials are coupled through an implicit string convention with no single
+source of truth — exactly the class of drift the data-model work was meant to end.
+
+**Fix (sketch).** Give the grid a `LINK_PATTERN` var (default `product-{slug}.html`, `{slug}`
+substituted per item) so the page config that knows the pageName can pass the same pattern; extend
+the checks to verify *every* local `href` against `build/` (the `.btn` check already does this
+generally) and drop the `product-` special case.
+
+**Status.** Open.
+
+## Carousel component is single-instance-per-page (hardcoded id)
+
+**Symptom.** `catalog/carousel/carousel.html` hardcodes `id="productCarousel"`, and the build
+script's thumbnails all target `#productCarousel`. Two carousels on one page (e.g. a future gallery
+section, or two collections) produce duplicate DOM ids and thumbnails that all drive the *first*
+carousel.
+
+**Why it matters.** It's the flagship "computed output as a component" material — and it silently
+breaks the first time it's composed twice, the main thing components are for.
+
+**Fix (sketch).** Accept a `CAROUSEL_ID` var (slugified; default derived from `ALT`/a counter),
+fill it into the template + thumbnail `data-bs-target`s. The products grid already does per-item
+ids (`carousel-<slug>`) — same pattern.
+
+**Status.** Open.
+
+## `--all-used` detection is narrower than the build — nested/odd-named pages are missed
+
+**Symptom.** `lib/used-materials.js` scans only **top-level** `pages/<dir>/<dir>.json` +
+`<dir>.html`. The build finds pages recursively, with any `.json` filename, and content via
+`content_file` — so a component referenced only from a nested page (`pages/blog/post/post.json`),
+a config whose name differs from its folder, or a `content_file` body is invisible to
+`ssg add material --all-used`.
+
+**Why it matters.** This is the slim-core plan's own named sharp edge ("'used' false negatives…
+slim core breaks that site") realized in code: the bridge under-detects, and the miss surfaces
+later as a `not installed` build failure — or not at all until a page is added.
+
+**Fix (sketch).** Reuse the build's discovery: walk pages recursively (same rule as
+`findPageFiles`), read each config's `components`/`layout`, and scan the *resolved* content body
+(auto `<page>.html` **and** `content_file`) for `{{COMPONENT:x}}`. The acceptance test the plan
+proposed ("after `--all-used`, a build with the engine catalog emptied still succeeds") would have
+caught this — add it for a nested-page fixture.
+
+**Status.** Open.
+
+## Generated pages hardcode the `data` part + can't map `title`; a missing template HTML is silent
+
+**Symptom.** Two gaps in `expandTemplatePage`:
+1. The built-in path derives page `<title>`/description/slug-override from a part literally named
+   `data` (`item.data.name`, `item.data.description`, `item.data.slug` — and `resolveCollectionItems`
+   hardcodes `item.data.slug` too). A model whose object part is named anything else silently gets
+   slug-derived titles, and `map` has no way to set `PAGE_TITLE`/`PAGE_DESCRIPTION` (they're not
+   template placeholders).
+2. A template page without its `<name>.html` builds one **empty-content** page per item —
+   `templateHtml` silently defaults to `''` while every other template-page misconfiguration fails
+   loud.
+
+**Why it matters.** The `data_model` pitch is "name your parts freely"; the built-in path quietly
+disagrees. And "50 blank pages, exit 0" is the kind of silence the Phase-4 validation was built to
+kill.
+
+**Fix (sketch).** (1) Honour reserved map keys (`PAGE_TITLE: "$data.name"` style) or add
+`generatorOptions.titleFrom`/`descriptionFrom`; document the `data`-part convention as the default.
+(2) Error (or at minimum warn) when the template HTML file is absent.
+
+**Status.** Open.
+
+## Every component's assets ship regardless of use (docs say otherwise) + `global` name collision
+
+**Symptom.** `copyComponentAssets` copies **every** component folder's `style.css`/`script.js`
+(via `allComponentNames()`) into `build/assets/css|js/` — only the *linking* is per-page. CLAUDE.md
+and the README both say assets are "auto-copied and auto-linked **only on pages that use the
+component**". A site with retired/experimental components ships their dead CSS/JS forever. Bonus
+edge: a component named `global` emits `assets/css/global.css`, clobbering the site's real
+`global.css` (and `allComponentNames` also picks up intermediate registry folders like `blocks/`
+as phantom "components").
+
+**Why it matters.** Leak control was the headline of v0.4 (`copy: false`) — the asset side quietly
+violates the same principle, plus a docs/behavior mismatch.
+
+**Fix (sketch).** Collect the used-component set during the page pass (it's already computed
+per-page) and copy the union afterwards — or copy lazily from `collectComponentAssets` hits.
+Reserve/guard the `global` asset name.
+
+**Status.** Open.
+
+## `slugify` collapses non-Latin names to `item` — guaranteed collisions
+
+**Symptom.** `lib/slugify.js` keeps only `[a-z0-9]`, so a wholly non-Latin item name (e.g.
+Ukrainian «Цегла червона») slugs to the fallback `item`. Two such items collide: page names crash
+into the loud collision error at best; the products grid emits duplicate `carousel-item` DOM ids
+and identical `product-item.html` links at worst (no collision check there).
+
+**Why it matters.** Collections are the user-data surface; a non-English catalog (a plausible
+first-party use case) can't produce distinct URLs without adding a per-item `data.slug` by hand,
+and the failure reads as a mysterious "page name collision", not "your names transliterate to
+nothing".
+
+**Fix (sketch).** Unicode-aware slugging (lowercase + `\p{L}\p{N}` keep-classes, or a small
+transliteration map), and when the fallback `item` fires, suffix the item folder's hash/index and
+warn with a hint to set `data.slug`.
+
+**Status.** Open.
+
+## `contactIcons`: unescaped hrefs, re-reads `config.json`, and depends on an undeployed image
+
+**Symptom.** Three quality gaps in the catalog material: (1) `href="${url}"` is emitted
+**unescaped** (every other build script escapes attribute values); (2) it re-reads `config.json`
+from disk instead of using vars — necessary only because `flattenConfig` keeps top-level *arrays*
+(`nav` → `{{NAV}}`) but flattens *objects* away (`social` → `SOCIAL_*` scalars), so no structured
+`SOCIAL` object reaches components; (3) the Viber branch hardcodes
+`assets/images/viber-brands-solid-full.svg` — a **site** asset that `ssg add material contactIcons`
+does not deploy, so a fresh adopting site gets a broken image.
+
+**Why it matters.** (2) is the interesting one: the config-flattening asymmetry forces any
+component needing a structured config object to bypass the var pipeline, which breaks the "one data
+path" story (and any future non-root config). (3) is a hole in the material model itself —
+materials can't declare non-component asset dependencies.
+
+**Fix (sketch).** Escape the href; preserve top-level objects as structured vars the way arrays are
+(e.g. also keep `SOCIAL` whole); ship the svg inside the component folder (components' own files
+deploy) or inline it, and note "materials with external asset deps" as a deploy-model gap in the
+tooling plan.
+
+**Status.** Open.
+
+## Catalog `_layout` bakes hero-specific fonts + CDN into every page
+
+**Symptom.** The default `_layout.html` hardloads Bootstrap CSS/JS *and* Google Fonts
+(`Cinzel`/`Montserrat`, commented "for Hero") on **every page of every adopting site** — whether or
+not the hero (or Bootstrap-dependent components at all) is used; plus a commented-out font link
+left in. There's no mechanism for a component to contribute `<head>` resources, which is why the
+hero's fonts got globalized into the layout.
+
+**Why it matters.** Contradicts the per-component asset philosophy ("linked only where used"),
+costs every page third-party requests, and couples the neutral layout to one catalog component's
+design choices.
+
+**Fix (sketch).** Short term: move the font links into a hero-owned mechanism or at least out of
+the default layout (sites that adopted hero add them via their own layout override). Longer term: a
+declared per-component `head` contribution (the component `.json` already exists) collected like
+CSS/JS — the clean home for fonts/preloads.
+
+**Status.** Open.
+
+## Version & scaffold drift: package.json says 0.4.0, stubs emit removed fields, stale paths
+
+**Symptom.** A bundle of drift a release pass should sweep:
+- `package.json` `version` is **0.4.0** and the README opens "Status: **v0.4.0**" (pin example
+  `checkout v0.4.0`) while known-issues records v0.6.4/v0.6.5 shipping — the one version number a
+  user sees is three minors stale.
+- `package.json` `files` still lists `components/` (gone; the catalog moved) — an npm publish would
+  ship a phantom dir and miss nothing else only by luck.
+- `ssg add page` stubs a top-level `"header_theme": ""` — the field v0.6.5 **removed** (layout vars
+  own it now), so every fresh page starts on a dead knob; the `builder` stub's comment documents
+  the helpers as `{ slugify, escapeHtml, raw }`, omitting `collection`/`log`.
+- `build.js` still defines `COMPONENTS_DIR = ENGINE_ROOT/components` (dead) and `loadComponent`'s
+  flat-form fallback probes the nonexistent engine `components/`; `lib/generators.js` warns via
+  bare `console.log` (the one message that bypasses `--quiet`/the file sink).
+- CLAUDE.md's own slim-core note admits "a full pass is pending".
+
+**Why it matters.** Individually small; together they make the project's self-description
+unreliable at exactly the places (version, scaffolds, first-run files) newcomers meet first.
+
+**Fix (sketch).** One housekeeping commit: bump version to the real tag, fix `files`, update the
+page stub to `layout: { name, vars }`, route the generators warning through `lib/log`, delete the
+dead engine-components probes, and do the pending CLAUDE.md pass.
+
+**Status.** Open.
+
+## Hot-path caching: component configs and files re-resolved per page × component
+
+**Symptom.** The per-page loops re-do filesystem work that never changes within a build:
+`readComponentConfig` re-reads + re-parses each component's `.json` on **every**
+`collectComponentAssets` call (twice per component per asset kind per page);
+`resolveComponentFile` probes up to four `existsSync` candidates per file per use; every
+`buildComponent` with a build script does `delete require.cache` + `require` **per component
+instance**; the generator registry is re-read per template page; the unresolved-`{{VAR}}` scan
+re-reads every built HTML at the end. For the current sites (~50 pages) this is milliseconds — but
+cost grows O(pages × components × fs-call), and it's the build's main scaling term now that
+generation is declarative.
+
+**Why it matters.** "Builds in well under a second" is a stated selling point; a few-hundred-page
+site with a dozen components each would spend most of its build in redundant stat/read/parse. All
+of it is trivially memoizable because the build is single-shot (nothing mutates components
+mid-run).
+
+**Fix (sketch).** Memoize `readComponentConfig` and `resolveComponentFile` in
+`lib/components.js` (per-factory `Map`, like the existing `_siteRegistry`/`_subcomponentMap`
+caches); require each build script once per build (the cache-bust is only needed *across* builds in
+a future watch mode — scope it there); read the generator registry once.
+
+**Status.** Open.
+
 ## ✅ Page config flat-mixes page identity, layout params, and content *(fixed)*
 
 **Symptom.** A page's `<name>.json` puts everything at the top level: `page` (the output name /
