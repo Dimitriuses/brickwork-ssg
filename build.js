@@ -50,18 +50,23 @@ function deferWarning(message) {
 // Support both flat and nested config formats
 function flattenConfig(obj, prefix = '') {
   const flattened = {};
-  
+
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      // Recursively flatten nested objects
+      // Recursively flatten nested objects into scalar vars (e.g. site.contact.email ->
+      // SITE_CONTACT_EMAIL) AND keep the object itself under its uppercase key (e.g. SOCIAL, SITE)
+      // so a build script can read the STRUCTURED value — arrays were already kept, objects weren't,
+      // which forced components like contactIcons to re-read config.json. replaceVariables skips
+      // object values, so a stray {{SOCIAL}} in a template stays literal (a build script consumes it).
       Object.assign(flattened, flattenConfig(value, prefix + key + '_'));
+      flattened[(prefix + key).toUpperCase()] = value;
     } else {
       // Use uppercase with prefix for nested keys
       const flatKey = (prefix + key).toUpperCase();
       flattened[flatKey] = value;
     }
   }
-  
+
   return flattened;
 }
 
@@ -164,7 +169,9 @@ function normalizeWebPaths(html) {
 function replaceVariables(template, vars) {
   const replacements = new Map();
   for (const [key, value] of Object.entries(vars)) {
-    if (Array.isArray(value)) continue; // handled by component build scripts — leave the placeholder
+    // Arrays and plain (non-RawHtml) objects are for build scripts — leave their placeholder literal
+    // (a raw "[object Object]" must never reach the page). Scalars + RawHtml are substituted.
+    if (value !== null && typeof value === 'object' && !(value instanceof RawHtml)) continue;
     replacements.set(key, value instanceof RawHtml ? value.value : escapeHtml(value));
   }
   if (replacements.size === 0) return template;

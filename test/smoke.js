@@ -1279,6 +1279,29 @@ const gridCustom = productsBuild.build({ COLLECTION: 'things', LINK_PATTERN: 'it
 check('products grid: default detail link is product-{slug}.html; LINK_PATTERN overrides it',
   /href="product-red-brick\.html"/.test(gridDefault) && /href="item-red-brick\.html"/.test(gridCustom));
 
+// contactIcons reads the structured SOCIAL config var (not a config.json re-read), escapes hrefs, and
+// inlines the Viber glyph (no undeployed image). The engine keeps top-level config objects as vars
+// (SOCIAL), and replaceVariables leaves object/array values literal (never "[object Object]").
+const ci = fs.mkdtempSync(path.join(os.tmpdir(), 'bwcicons-'));
+const ciArg = ci.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(ci, p)), { recursive: true }); fs.writeFileSync(path.join(ci, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'CI' }, nav: [], social: { github: 'https://gh.com/x?a=1&b=2', viber: 'viber://chat', bogusplat: 'http://x' } }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('components/contactIcons/contactIcons.html', '<div class="contact">{{SOCIAL_ICONS}}</div>');
+  fs.copyFileSync(path.join(root, 'catalog', 'contactIcons', 'contactIcons.build.js'), path.join(ci, 'components', 'contactIcons', 'contactIcons.build.js'));
+  mk('pages/index/index.json', JSON.stringify({ page: 'index', layout: '_layout', components: [{ name: 'contactIcons', vars: {} }] }));
+  mk('pages/index/index.html', '<main>{{COMPONENT:contactIcons}} {{SOCIAL}}</main>');
+  fs.mkdirSync(path.join(ci, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${ciArg}"`, { cwd: root, stdio: 'pipe' });
+  const out = fs.readFileSync(path.join(ci, 'build', 'index.html'), 'utf8');
+  check('contactIcons: escaped href + inline Viber svg + unknown platform skipped; {{SOCIAL}} object stays literal',
+    /href="https:\/\/gh\.com\/x\?a=1&amp;b=2"/.test(out) && /<svg class="bi"/.test(out) &&
+    !/bogusplat/.test(out) && !/\[object Object\]/.test(out) && /\{\{SOCIAL\}\}/.test(out));
+} finally {
+  try { fs.rmSync(ci, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Component assets ship only where USED: a component that no page references must not have its
 // style.css/script.js copied into build/ (the "linked only where used" contract, for the copy too).
 const au = fs.mkdtempSync(path.join(os.tmpdir(), 'bwusedassets-'));

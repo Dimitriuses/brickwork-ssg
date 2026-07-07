@@ -365,7 +365,7 @@ non-Latin distinctness, accents, and the punctuation-only fallback.
 
 **Status.** ✅ Fixed (the rare all-punctuation collision stays a loud build error, per design).
 
-## `contactIcons`: unescaped hrefs, re-reads `config.json`, and depends on an undeployed image
+## ✅ `contactIcons`: unescaped hrefs, re-reads `config.json`, and depends on an undeployed image *(fixed)*
 
 **Symptom.** Three quality gaps in the catalog material: (1) `href="${url}"` is emitted
 **unescaped** (every other build script escapes attribute values); (2) it re-reads `config.json`
@@ -380,12 +380,17 @@ component needing a structured config object to bypass the var pipeline, which b
 path" story (and any future non-root config). (3) is a hole in the material model itself —
 materials can't declare non-component asset dependencies.
 
-**Fix (sketch).** Escape the href; preserve top-level objects as structured vars the way arrays are
-(e.g. also keep `SOCIAL` whole); ship the svg inside the component folder (components' own files
-deploy) or inline it, and note "materials with external asset deps" as a deploy-model gap in the
-tooling plan.
+**Fix.** ✅ Done. **(2)** `flattenConfig` now **also keeps each top-level (and nested) object under
+its uppercase key** (`SOCIAL`, `SITE`, `SITE_CONTACT`, …) alongside the flattened scalars — the way
+arrays were already kept — and `replaceVariables` skips array/plain-object values (so a stray
+`{{SOCIAL}}` stays literal, never `"[object Object]"`). `contactIcons.build.js` reads `vars.SOCIAL`
+instead of re-reading `config.json`. **(1)** It now `escapeHtml`s the href (and adds `rel="noopener"`
+to the `target=_blank` links). **(3)** The Viber branch renders a **self-contained inline SVG** (a
+currentColor glyph) — no external image to deploy. Smoke asserts the escaped href, the inline Viber
+SVG, an unknown platform skipped, `{{SOCIAL}}` staying literal, and no `[object Object]`. (The general
+"materials with external asset deps" gap remains a noted deploy-model limitation.)
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Catalog `_layout` bakes hero-specific fonts + CDN into every page
 
