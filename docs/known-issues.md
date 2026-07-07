@@ -292,7 +292,7 @@ inline `{{COMPONENT}}` in its nested content) and asserts both are found.
 
 **Status.** ✅ Fixed.
 
-## Generated pages hardcode the `data` part + can't map `title`; a missing template HTML is silent
+## ✅ Generated pages hardcode the `data` part + can't map `title`; a missing template HTML is silent *(fixed)*
 
 **Symptom.** Two gaps in `expandTemplatePage`:
 1. The built-in path derives page `<title>`/description/slug-override from a part literally named
@@ -308,11 +308,15 @@ inline `{{COMPONENT}}` in its nested content) and asserts both are found.
 disagrees. And "50 blank pages, exit 0" is the kind of silence the Phase-4 validation was built to
 kill.
 
-**Fix (sketch).** (1) Honour reserved map keys (`PAGE_TITLE: "$data.name"` style) or add
-`generatorOptions.titleFrom`/`descriptionFrom`; document the `data`-part convention as the default.
-(2) Error (or at minimum warn) when the template HTML file is absent.
+**Fix.** ✅ Done. **(1)** The built-in descriptor now honours **reserved `map` keys**: if the `map`
+resolves `PAGE_TITLE` / `PAGE_DESCRIPTION`, those drive the page title/description (from *any* part,
+e.g. `"PAGE_TITLE": "$meta.headline"`); the `data`-part `name`/`description` remain the default
+fallback. **(2)** A template whose `<name>.html` is **absent** now fails loud when it declares a
+`map` (placeholders with nowhere to go); with no `map`, a components-only template is legitimate so
+it just warns. (The slug default stays folder-name / `item.data.slug`, documented as the convention.)
+Smoke asserts a `PAGE_TITLE`-mapped title from a non-`data` part and the missing-HTML build failure.
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Every component's assets ship regardless of use (docs say otherwise) + `global` name collision
 

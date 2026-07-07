@@ -1269,6 +1269,36 @@ const gridCustom = productsBuild.build({ COLLECTION: 'things', LINK_PATTERN: 'it
 check('products grid: default detail link is product-{slug}.html; LINK_PATTERN overrides it',
   /href="product-red-brick\.html"/.test(gridDefault) && /href="item-red-brick\.html"/.test(gridCustom));
 
+// Generated pages: a map's reserved PAGE_TITLE / PAGE_DESCRIPTION keys drive the page title from ANY
+// part (not just a part literally named `data`); and a `map` template with no HTML fails loud.
+const g13 = fs.mkdtempSync(path.join(os.tmpdir(), 'bwgen13-'));
+const g13Arg = g13.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(g13, p)), { recursive: true }); fs.writeFileSync(path.join(g13, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'G13' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('shared/database.json', JSON.stringify({ collections: [{ name: 'stuff', source: 'shared/stuff', destination: 'stuff', enabled: true,
+    data_model: { meta: { match: 'meta.json', type: 'object', copy: false, required: true } } }] }));
+  mk('shared/stuff/alpha/meta.json', JSON.stringify({ headline: 'Custom Headline', blurb: 'hello' }));
+  mk('pages/detail/detail.json', JSON.stringify({ generatorOptions: { pageName: 'item-{slug}', source: 'stuff',
+    map: { PAGE_TITLE: '$meta.headline', BODY: '$meta.blurb' } }, layout: '_layout', components: [] }));
+  mk('pages/detail/detail.html', '<h1>{{BODY}}</h1>');
+  fs.mkdirSync(path.join(g13, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${g13Arg}"`, { cwd: root, stdio: 'pipe' });
+  const item = fs.readFileSync(path.join(g13, 'build', 'item-alpha.html'), 'utf8');
+  check('generated page: PAGE_TITLE map key drives the title from a non-`data` part',
+    /<title>Custom Headline/.test(item) && /<h1>hello<\/h1>/.test(item));
+  // A template with a `map` but no HTML file to fill → loud error.
+  mk('pages/broken/broken.json', JSON.stringify({ generatorOptions: { pageName: 'b-{slug}', source: 'stuff', map: { X: '$meta.headline' } }, layout: '_layout', components: [] }));
+  let g13Exit = 0, g13Out = '';
+  try { execSync(`node cli.js build --site "${g13Arg}"`, { cwd: root, stdio: 'pipe' }); }
+  catch (e) { g13Exit = e.status || 1; g13Out = ((e.stdout || '') + '') + ((e.stderr || '') + ''); }
+  check('generated page: a map template with no HTML fails the build',
+    g13Exit !== 0 && /template HTML "broken\.html" is missing/.test(g13Out));
+} finally {
+  try { fs.rmSync(g13, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // Carousel is multi-instance: it derives a per-instance DOM id (from ALT, or an explicit CAROUSEL_ID)
 // and points its thumbnails at that id — so two carousels on one page don't collide on #productCarousel.
 const carouselBuild = require('../catalog/carousel/carousel.build.js');

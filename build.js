@@ -510,19 +510,34 @@ function expandTemplatePage(templateFile, templateConfig) {
       buildErrors += mapErrors.length;
       return 0;
     }
-    descriptors = ctxCollection.items.map(({ id, item }) => ({
-      slug: id,
-      title: (item.data && item.data.name) || id,
-      description: (item.data && item.data.description) || '',
-      vars: resolveMap(opts.map || {}, item),
-      item
-    }));
+    descriptors = ctxCollection.items.map(({ id, item }) => {
+      const vars = resolveMap(opts.map || {}, item);
+      // The page title/description default to the `data` part's name/description (the convention), but
+      // a `map` may set the reserved keys PAGE_TITLE / PAGE_DESCRIPTION to drive them from ANY part —
+      // so a model whose object part isn't named `data` (or that computes the title) isn't stuck.
+      return {
+        slug: id,
+        title: vars.PAGE_TITLE || (item.data && item.data.name) || id,
+        description: vars.PAGE_DESCRIPTION || (item.data && item.data.description) || '',
+        vars,
+        item
+      };
+    });
   }
 
   // Template HTML lives beside the config: <dir>/<name>.html. Filled per item.
   const templateDir = path.dirname(templateFile);
   const htmlPath = path.join(templateDir, `${path.basename(templateFile, '.json')}.html`);
-  const templateHtml = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf8') : '';
+  const htmlExists = fs.existsSync(htmlPath);
+  // A template that declares a `map` (placeholders to fill) but has no HTML to fill would silently
+  // build empty pages — fail loud. With no `map`, a components-only template is legitimate, so just warn.
+  if (!htmlExists) {
+    if (opts.map && Object.keys(opts.map).length > 0) {
+      return fail(`template HTML "${path.basename(htmlPath)}" is missing, but generatorOptions.map has entries to fill — there is no template to fill them into`);
+    }
+    deferWarning(`template "${path.basename(templateDir)}" has no ${path.basename(htmlPath)}; generated pages get no content template (only their components, if any)`);
+  }
+  const templateHtml = htmlExists ? fs.readFileSync(htmlPath, 'utf8') : '';
   const assetsFrom = path.relative(PAGES_DIR, templateDir); // template folder (relative) owns the page asset
 
   let built = 0;
