@@ -366,6 +366,9 @@ function buildPage(pageConfig, pageName) {
   const jsScripts = jsFiles.map(file =>
     `  <script src="${file}"></script>`
   ).join('\n');
+
+  // <head> resources contributed by the page's components (e.g. the hero's fonts) — see collectComponentHead.
+  const headLinks = collectComponentHead(pageData.components || []).join('\n');
   
   // Replace layout variables
   const pageVars = {
@@ -384,7 +387,9 @@ function buildPage(pageConfig, pageName) {
     CSS_LINKS: raw(cssLinks),
     JS_SCRIPTS: raw(jsScripts),
     HEAD_EXTRA: raw(cssLinks),
-    BODY_EXTRA: raw(jsScripts)
+    BODY_EXTRA: raw(jsScripts),
+    // Component-contributed <head> resources (fonts/preloads/meta), only for components on this page.
+    HEAD_LINKS: raw(headLinks)
   };
   
   const finalHtml = normalizeWebPaths(buildComponent(layoutName, pageVars));
@@ -631,6 +636,29 @@ function collectComponentAssets(kind, components, pageAssetFolder) {
 
 const collectComponentCSS = (components, pageAssetFolder) => collectComponentAssets('css', components, pageAssetFolder);
 const collectComponentJS = (components, pageAssetFolder) => collectComponentAssets('js', components, pageAssetFolder);
+
+// Collect the <head> resources a page needs from its components. A component's <name>.json may declare
+// a `head` array of raw HTML strings (font links, preloads, meta) that belong in <head> ONLY when the
+// component is used — so e.g. the hero's Google Fonts load on hero pages, not baked into every page's
+// layout. Walks the same graph as the assets (base + page components + deps/sub-components), deduped
+// and ordered. The layout places them via {{HEAD_LINKS}}.
+function collectComponentHead(components) {
+  const seen = new Set();
+  const links = [];
+  const visit = (name) => {
+    if (seen.has(name) || name === 'global') return;
+    seen.add(name);
+    const cfg = readComponentConfig(name);
+    (cfg.dependencies || []).forEach(visit);
+    (cfg.subComponents || []).forEach(visit);
+    (Array.isArray(cfg.head) ? cfg.head : []).forEach(h => {
+      if (typeof h === 'string' && h.trim() && !links.includes(h)) links.push(h);
+    });
+  };
+  ASSET_KINDS.css.base.forEach(visit);            // always-on base (the layout, its header/footer deps)
+  (components || []).forEach(comp => visit(comp.name));
+  return links;
+}
 
 // Copy the site's global.css / global.js (needed by every page) into build/assets/<kind>/.
 function copyGlobalAssets() {

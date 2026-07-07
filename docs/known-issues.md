@@ -392,7 +392,7 @@ SVG, an unknown platform skipped, `{{SOCIAL}}` staying literal, and no `[object 
 
 **Status.** ✅ Fixed.
 
-## Catalog `_layout` bakes hero-specific fonts + CDN into every page
+## ✅ Catalog `_layout` bakes hero-specific fonts + CDN into every page *(fixed)*
 
 **Symptom.** The default `_layout.html` hardloads Bootstrap CSS/JS *and* Google Fonts
 (`Cinzel`/`Montserrat`, commented "for Hero") on **every page of every adopting site** — whether or
@@ -404,12 +404,18 @@ hero's fonts got globalized into the layout.
 costs every page third-party requests, and couples the neutral layout to one catalog component's
 design choices.
 
-**Fix (sketch).** Short term: move the font links into a hero-owned mechanism or at least out of
-the default layout (sites that adopted hero add them via their own layout override). Longer term: a
-declared per-component `head` contribution (the component `.json` already exists) collected like
-CSS/JS — the clean home for fonts/preloads.
+**Fix.** ✅ Done — the **longer-term** fix (the clean home). A component's `<name>.json` may now
+declare a **`head`** array of raw HTML strings (font links, preloads, meta); `collectComponentHead`
+walks the same graph as the assets (base + page components + deps/sub-components), dedupes, and the
+layout injects them via a new **`{{HEAD_LINKS}}`** placeholder — so a component's `<head>` resources
+load **only on pages that use it**. The catalog `_layout.html` dropped the hero fonts (and the stray
+commented font link) and now places `{{HEAD_LINKS}}`; the fonts moved to `catalog/hero/hero.json`
+`head`. The `ssg init` layout stub gained `{{HEAD_LINKS}}`. Smoke asserts the fonts load on the
+example's hero page but not on `about`, and (fixture) a component's `head` appears only where used. A
+site with its own `_layout.html` opts in by adding `{{HEAD_LINKS}}` (non-breaking — without it, it
+just doesn't receive component head resources).
 
-**Status.** Open.
+**Status.** ✅ Fixed.
 
 ## Version & scaffold drift: package.json says 0.4.0, stubs emit removed fields, stale paths
 

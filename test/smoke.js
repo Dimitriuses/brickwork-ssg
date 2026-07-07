@@ -1279,6 +1279,33 @@ const gridCustom = productsBuild.build({ COLLECTION: 'things', LINK_PATTERN: 'it
 check('products grid: default detail link is product-{slug}.html; LINK_PATTERN overrides it',
   /href="product-red-brick\.html"/.test(gridDefault) && /href="item-red-brick\.html"/.test(gridCustom));
 
+// Per-component <head> contribution: a component's <name>.json `head` array is injected via
+// {{HEAD_LINKS}} ONLY on pages that use the component (so e.g. the hero's fonts don't bake into every
+// page). Also verified against the example: fonts appear on the hero page (index), not on about.
+check('layout: hero fonts load on the hero page, not on a non-hero page (example)',
+  /fonts\.googleapis\.com\/css2/.test(fs.readFileSync(path.join(buildDir, 'index.html'), 'utf8')) &&
+  !/fonts\.googleapis\.com\/css2/.test(fs.readFileSync(path.join(buildDir, 'about.html'), 'utf8')));
+const hd = fs.mkdtempSync(path.join(os.tmpdir(), 'bwhead-'));
+const hdArg = hd.replace(/\\/g, '/');
+try {
+  const mk = (p, c) => { fs.mkdirSync(path.dirname(path.join(hd, p)), { recursive: true }); fs.writeFileSync(path.join(hd, p), c); };
+  mk('config.json', JSON.stringify({ site: { name: 'HD' }, nav: [] }));
+  mk('components/_layout/_layout.html', '<!doctype html><html><head><title>{{PAGE_TITLE}}</title>{{HEAD_LINKS}}{{CSS_LINKS}}</head><body>{{CONTENT}}{{JS_SCRIPTS}}</body></html>');
+  mk('components/fancyfont/fancyfont.html', '<div class="ff">x</div>');
+  mk('components/fancyfont/fancyfont.json', JSON.stringify({ head: ['<link rel="stylesheet" href="https://example.com/font.css">'] }));
+  mk('pages/withit/withit.json', JSON.stringify({ page: 'withit', layout: '_layout', components: [{ name: 'fancyfont', vars: {} }] }));
+  mk('pages/withit/withit.html', '<main>a</main>');
+  mk('pages/without/without.json', JSON.stringify({ page: 'without', layout: '_layout', components: [] }));
+  mk('pages/without/without.html', '<main>b</main>');
+  fs.mkdirSync(path.join(hd, 'assets', 'images'), { recursive: true });
+  execSync(`node cli.js build --site "${hdArg}"`, { cwd: root, stdio: 'pipe' });
+  check('layout: component `head` injected only on pages using the component',
+    /example\.com\/font\.css/.test(fs.readFileSync(path.join(hd, 'build', 'withit.html'), 'utf8')) &&
+    !/example\.com\/font\.css/.test(fs.readFileSync(path.join(hd, 'build', 'without.html'), 'utf8')));
+} finally {
+  try { fs.rmSync(hd, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+}
+
 // contactIcons reads the structured SOCIAL config var (not a config.json re-read), escapes hrefs, and
 // inlines the Viber glyph (no undeployed image). The engine keeps top-level config objects as vars
 // (SOCIAL), and replaceVariables leaves object/array values literal (never "[object Object]").
