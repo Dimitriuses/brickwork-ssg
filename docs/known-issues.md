@@ -4,6 +4,29 @@ A running log of bugs and structural inconsistencies, so they aren't forgotten. 
 entries at the top; keep each short — symptom, why it matters, a sketch of the fix, status. Resolved
 entries stay as a record, marked ✅ Fixed.
 
+## `ssg add material --force` reports a forced overwrite as "left as-is" (drifted, 0 copied)
+
+**Symptom.** With `--force`, `deployMaterial` **does** overwrite a drifted (site-edited) file, but the
+CLI still logs it through the drift branch — `<material>/<file> differs from the engine catalog — left
+as-is (use --force to overwrite)` — and the summary counts it under `drifted`, not `copied`
+(`added 0 file(s) … (N drifted)`). So a successful forced re-sync reads as if it refused / did nothing.
+Seen re-syncing `contactIcons` into both sites at v0.7.1: the message said "left as-is (use --force)",
+yet `contactIcons.build.js` **was** updated to the fixed version.
+
+**Why it matters.** `ssg add material --force` is the one command for pulling an engine fix into an
+owned (shadowing) component; reporting a real overwrite as a no-op invites a needless re-run, a manual
+edit, or the wrong conclusion that the sync failed. Purely a reporting bug — the file *is* overwritten —
+but it undermines trust in the adopt path.
+
+**Fix (sketch).** In `cli.js`'s material `report()`, distinguish forced overwrites: a file in
+`res.drifted` when `--force` was passed was overwritten, so log it as `~ <file> (overwrote drift)` and
+count it toward copied; keep the "left as-is (use --force)" wording for the **non-forced** case only.
+Cleaner still: have `deployMaterial` return `overwritten` separately from `drifted` so the CLI needn't
+infer it from the flag. A smoke assertion that a forced re-deploy of a drifted material reports a
+non-zero copy count would guard it.
+
+**Status.** Open.
+
 > The block of open entries below is from a **2026-07-07 audit** (engine ≈ v0.7.0) — ordered
 > most-severe first. Each was verified against the code (and, where marked *reproduced*, against a
 > live fixture build).
